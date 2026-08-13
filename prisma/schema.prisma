@@ -1,0 +1,989 @@
+// EDENIA — schema de donnees
+// Portable SQLite (dev) <-> PostgreSQL (prod) : pas d'enum Prisma, pas de tableau natif.
+// Les valeurs enumerees sont des String validees par Zod (src/lib/config/enums.ts).
+// Voir docs/02-modele-de-donnees.md
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// IDENTITE ET COMPTE
+// ---------------------------------------------------------------------------
+
+model User {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // §8 : un seul canal verifie suffit. Les deux champs sont nullable.
+  phone         String? @unique
+  phoneCountry  String? // ISO 3166-1 alpha-2, ex "TG"
+  phoneVerified Boolean @default(false)
+  email         String? @unique
+  emailVerified Boolean @default(false)
+
+  status          String   @default("ACTIVE") // ACTIVE | RESTRICTED | SUSPENDED | BANNED | DELETED
+  statusReason    String?
+  role            String   @default("USER") // cf. AdminRole pour les roles internes
+  locale          String   @default("fr")
+  sessionVersion  Int      @default(1) // incremente = revocation de toutes les sessions
+  lastActiveAt    DateTime @default(now())
+  deletionRequestedAt DateTime?
+  anonymizedAt    DateTime?
+
+  // §34 : score interne de confiance. JAMAIS serialise vers le client.
+  trustScore Int @default(50)
+
+  profile          Profile?
+  contactMethods   ContactMethod[]
+  photos           Photo[]
+  videos           Video[]
+  faithProfile     FaithProfile?
+  marriageVision   MarriageVision?
+  familyPreferences FamilyPreferences?
+  personalityProfile PersonalityProfile?
+  lifestyle        Lifestyle?
+  preferences      Preferences?
+  dealbreakers     Dealbreaker[]
+  consents         Consent[]
+  devices          Device[]
+
+  likesSent        Like[]  @relation("LikesSent")
+  likesReceived    Like[]  @relation("LikesReceived")
+  matchesA         Match[] @relation("MatchUserA")
+  matchesB         Match[] @relation("MatchUserB")
+  messages         Message[]
+  blocksMade       Block[] @relation("BlocksMade")
+  blocksReceived   Block[] @relation("BlocksReceived")
+  reportsMade      Report[] @relation("ReportsMade")
+  reportsReceived  Report[] @relation("ReportsReceived")
+  trustSignals     TrustSignal[]
+  profileViews     ProfileView[] @relation("Viewer")
+  profileViewsGot  ProfileView[] @relation("Viewed")
+
+  verificationRequests VerificationRequest[] @relation("RequestSubject")
+  identityVerification IdentityVerification?
+  profileVerification  ProfileVerification?
+  churchVerification   ChurchVerification?
+
+  subscriptions Subscription[]
+  payments      Payment[]
+  notifications Notification[]
+  pushSubscriptions PushSubscription[]
+
+  aiConversations AIConversation[]
+  aiRecommendations AIRecommendation[]
+
+  eventRegistrations EventRegistration[]
+  testimonials       Testimonial[]
+  dateChecks         DateCheck[]
+
+  adminProfile AdminUser?
+
+  @@index([status, lastActiveAt])
+  @@index([trustScore])
+}
+
+// §8 : canaux de contact additionnels ajoutes apres coup.
+model ContactMethod {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind       String // PHONE | EMAIL
+  value      String
+  countryCode String?
+  verified   Boolean   @default(false)
+  verifiedAt DateTime?
+  isPrimary  Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+
+  @@unique([kind, value])
+  @@index([userId])
+}
+
+model OtpChallenge {
+  id          String   @id @default(cuid())
+  channel     String // PHONE | EMAIL
+  destination String
+  codeHash    String
+  salt        String
+  purpose     String // SIGNUP | LOGIN | ADD_CONTACT | RECOVERY
+  attempts    Int      @default(0)
+  maxAttempts Int      @default(5)
+  consumedAt  DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  ipHash      String?
+
+  @@index([destination, createdAt])
+  @@index([expiresAt])
+}
+
+model Device {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fingerprint  String // empreinte non reversible, §34 detection multi-comptes
+  userAgent    String?
+  lastSeenAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, fingerprint])
+  @@index([fingerprint])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// §47 : consentement granulaire, revocable, par finalite.
+model Consent {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose   String // TERMS | PRIVACY | FAITH_PROFILE | CHURCH_VERIFICATION | AI_PROCESSING | MARKETING
+  granted   Boolean
+  version   String
+  grantedAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  @@index([userId, purpose])
+}
+
+// ---------------------------------------------------------------------------
+// PROFIL (§16)
+// ---------------------------------------------------------------------------
+
+model Profile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  firstName   String
+  birthDate   DateTime // stocke la date, jamais "age" : §10 age recalcule
+  gender      String // F | M
+  seeking     String // F | M
+  bio         String?
+  profession  String?
+  education   String? // NONE | SECONDARY | VOCATIONAL | BACHELOR | MASTER | DOCTORATE
+  languages   String   @default("[]") // JSON string[] (portabilite SQLite/PG)
+  maritalStatus String @default("SINGLE") // SINGLE | SEPARATED | DIVORCED | WIDOWED
+  hasChildren Boolean  @default(false)
+  childrenCount Int    @default(0)
+  mobility    String? // LOCAL | NATIONAL | REGIONAL | INTERNATIONAL
+
+  countryCode String?
+  regionId    String?
+  cityId      String?
+  country     Country? @relation(fields: [countryCode], references: [code])
+  region      Region?  @relation(fields: [regionId], references: [id])
+  city        City?    @relation(fields: [cityId], references: [id])
+  isDiaspora  Boolean  @default(false) // §23 rail Diaspora
+
+  completeness Int     @default(0) // 0-100
+  isPublished  Boolean @default(false)
+  publishedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([countryCode, cityId, gender])
+  @@index([isPublished, publishedAt])
+}
+
+model Photo {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storageKey String
+  width      Int?
+  height     Int?
+  blurhash   String? // §45 placeholder ultra-leger pour le chargement progressif
+  position   Int      @default(0)
+  isPrimary  Boolean  @default(false)
+  moderationStatus String @default("PENDING") // PENDING | APPROVED | REJECTED
+  moderationReason String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, position])
+}
+
+// §32/§49 : modelise des le MVP, desactive par feature flag.
+model Video {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storageKey String
+  durationMs Int?
+  posterKey  String?
+  moderationStatus String @default("PENDING")
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+}
+
+// §17 — donnees religieuses : categorie sensible, consentement dedie (cf. C6).
+model FaithProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  denomination     String? // CATHOLIC | PROTESTANT | EVANGELICAL | PENTECOSTAL | METHODIST | BAPTIST | ADVENTIST | ORTHODOX | OTHER | PREFER_NOT_SAY
+  churchId         String?
+  church           Church? @relation(fields: [churchId], references: [id])
+  churchNameRaw    String? // saisie libre tant que l'eglise n'est pas au referentiel
+  commitmentLevel  String? // OCCASIONAL | REGULAR | COMMITTED | SERVING
+  ministry         String?
+  attendance       String? // RARELY | MONTHLY | WEEKLY | MULTIPLE_WEEKLY
+  prayerImportance Int? // 1-5
+  bibleReading     String? // RARELY | SOMETIMES | WEEKLY | DAILY
+  spiritualVision  String?
+  faithInCouple    String? // §17 place de la foi dans le couple
+  conversionStory  String?
+
+  // §47 + C6 : visibilite reglable champ par champ (JSON { field: PUBLIC|MATCHES|PRIVATE })
+  visibility String @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([denomination])
+  @@index([churchId])
+}
+
+// §18
+model MarriageVision {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  wantsMarriage    String? // YES | PROBABLY | UNDECIDED  (§13 : "a discuter" existe)
+  timeline         String? // WITHIN_1Y | WITHIN_2Y | WITHIN_5Y | NO_RUSH | UNDECIDED
+  wantsChildren    String? // YES | NO | UNDECIDED
+  childrenDesired  Int?
+  childEducation   String?
+  financeModel     String? // POOLED | SEPARATE | MIXED | UNDECIDED
+  careerView       String? // BOTH_CAREERS | ONE_FOCUS_HOME | FLEXIBLE | UNDECIDED
+  entrepreneurship String?
+  responsibilities String?
+  residenceAfter   String? // OWN_HOME | WITH_FAMILY | UNDECIDED
+  countryAfter     String? // code pays souhaite apres mariage
+  expatriation     String? // WANTED | OPEN | PREFER_STAY | REFUSED | UNDECIDED
+  lifeInAfrica     String? // COMMITTED | OPEN | UNSURE
+  internationalMobility String?
+
+  visibility String @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// §19 — specificites culturelles africaines. Preferences, jamais des normes.
+model FamilyPreferences {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  parentsRelationship String? // CLOSE | REGULAR | DISTANT | COMPLEX
+  familyProximity     String? // SAME_CITY | SAME_COUNTRY | FLEXIBLE | FAR
+  extendedFamilySupport String? // ESSENTIAL | IMPORTANT | OCCASIONAL | LIMITED | UNDECIDED
+  traditionsImportance Int? // 1-5
+  inLawsRole          String? // INVOLVED | CONSULTED | RESPECTFUL_DISTANCE | UNDECIDED
+  householdView       String?
+  financialManagement String?
+  dowryView           String? // TRADITIONAL | SYMBOLIC | MINIMAL | UNDECIDED
+
+  visibility String @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PersonalityProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Traits 0-100, deduits de la conversation IA, corrigeables par l'utilisateur.
+  openness      Int?
+  conscientiousness Int?
+  extraversion  Int?
+  agreeableness Int?
+  emotionality  Int?
+  conflictStyle String? // DIALOGUE | TIME_APART | MEDIATION | UNDECIDED
+  loveLanguages String @default("[]") // JSON string[]
+  source        String @default("AI_INFERRED") // AI_INFERRED | USER_CONFIRMED
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Lifestyle {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  interests   String  @default("[]") // JSON string[]
+  smoking     String? // NEVER | OCCASIONAL | REGULAR
+  alcohol     String? // NEVER | OCCASIONAL | SOCIAL
+  sports      String?
+  music       String?
+  diet        String?
+  socialStyle String? // HOMEBODY | BALANCED | OUTGOING
+  workRhythm  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// §22 : preferences souples (utilisees pour la ponderation du score)
+model Preferences {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  ageMin          Int     @default(21)
+  ageMax          Int     @default(45)
+  distanceKm      Int? // null = pas de limite
+  scope           String  @default("CITY") // CITY | REGION | COUNTRY | FRANCOPHONE_AFRICA | INTERNATIONAL | DIASPORA
+  countriesJson   String  @default("[]") // JSON string[] de codes pays
+  denominationsJson String @default("[]")
+  wantsChildrenPref String?
+  educationMin    String?
+  openToDiaspora  Boolean @default(true)
+  openToChildren  Boolean @default(true) // ouvert a quelqu'un ayant deja des enfants
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// §22 : criteres essentiels (eliminatoires). Distincts des preferences ci-dessus.
+model Dealbreaker {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key       String // WANTS_MARRIAGE | WANTS_CHILDREN | FAITH_PRACTICE | DENOMINATION | COUNTRY | CITY | EXPATRIATION | FAMILY_VISION | NO_CHILDREN_ALREADY
+  operator  String   @default("EQUALS") // EQUALS | IN | AT_LEAST | AT_MOST | NOT_EQUALS
+  valueJson String // JSON de la valeur attendue
+  createdAt DateTime @default(now())
+
+  @@unique([userId, key])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// GEOGRAPHIE (§24) — Afrique > Pays > Region > Ville
+// ---------------------------------------------------------------------------
+
+model Country {
+  code        String  @id // ISO alpha-2 : TG, BJ, CI...
+  nameFr      String
+  dialCode    String // +228
+  currency    String // XOF
+  isLaunched  Boolean @default(false) // §4 : deploiement par vagues
+  isAfrican   Boolean @default(true)
+  isFrancophone Boolean @default(true)
+  launchOrder Int?
+
+  regions  Region[]
+  cities   City[]
+  profiles Profile[]
+  churches Church[]
+  events   Event[]
+}
+
+model Region {
+  id          String  @id @default(cuid())
+  countryCode String
+  country     Country @relation(fields: [countryCode], references: [code])
+  nameFr      String
+  slug        String
+
+  cities   City[]
+  profiles Profile[]
+
+  @@unique([countryCode, slug])
+}
+
+model City {
+  id          String  @id @default(cuid())
+  regionId    String
+  region      Region  @relation(fields: [regionId], references: [id])
+  countryCode String
+  country     Country @relation(fields: [countryCode], references: [code])
+  nameFr      String
+  slug        String
+  // §24 : centroide de ville uniquement, jamais la position d'un utilisateur.
+  lat         Float?
+  lng         Float?
+  population  Int?
+
+  profiles Profile[]
+  churches Church[]
+  events   Event[]
+
+  @@unique([countryCode, slug])
+  @@index([regionId])
+}
+
+// ---------------------------------------------------------------------------
+// EGLISES (§28, §29)
+// ---------------------------------------------------------------------------
+
+model Church {
+  id          String  @id @default(cuid())
+  name        String
+  denomination String?
+  countryCode String
+  country     Country @relation(fields: [countryCode], references: [code])
+  cityId      String?
+  city        City?   @relation(fields: [cityId], references: [id])
+  address     String? // adresse de l'eglise (lieu public), pas d'un utilisateur
+  slug        String  @unique
+  isVerified  Boolean @default(false)
+  createdAt   DateTime @default(now())
+
+  partner      ChurchPartner?
+  faithProfiles FaithProfile[]
+  verifications ChurchVerification[]
+  events        Event[]
+}
+
+model ChurchPartner {
+  id        String   @id @default(cuid())
+  churchId  String   @unique
+  church    Church   @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  contactName  String
+  contactEmail String?
+  contactPhone String?
+  status    String   @default("PENDING") // PENDING | ACTIVE | SUSPENDED
+  agreementVersion String?
+  signedAt  DateTime?
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// VERIFICATION (§25 a §30, §36, §52)
+// ---------------------------------------------------------------------------
+
+model VerificationRequest {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation("RequestSubject", fields: [userId], references: [id], onDelete: Cascade)
+  kind      String // IDENTITY | PROFILE | CHURCH
+  status    String   @default("PENDING") // PENDING | IN_REVIEW | NEED_MORE_INFO | APPROVED | REJECTED | CANCELLED
+  agentId   String?
+  agent     AdminUser? @relation(fields: [agentId], references: [id])
+  notesInternal String?
+  messageToUser String?
+  submittedAt DateTime @default(now())
+  decidedAt   DateTime?
+
+  events VerificationEvent[]
+
+  @@index([status, submittedAt])
+  @@index([userId, kind])
+}
+
+model VerificationEvent {
+  id        String   @id @default(cuid())
+  requestId String
+  request   VerificationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  actorId   String?
+  action    String // SUBMITTED | ASSIGNED | INFO_REQUESTED | APPROVED | REJECTED | COMMENT
+  detail    String?
+  createdAt DateTime @default(now())
+
+  @@index([requestId, createdAt])
+}
+
+model IdentityVerification {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    String   @default("NONE") // NONE | PENDING | APPROVED | REJECTED
+  documentType String? // ID_CARD | PASSPORT | DRIVER_LICENSE | VOTER_CARD
+  // §30/§47 : references chiffrees, jamais rendues cote client.
+  documentKeyEnc String?
+  selfieKeyEnc   String?
+  matchScore     Float?
+  birthDateChecked Boolean @default(false)
+  verifiedAt DateTime?
+  expiresAt  DateTime?
+  purgeAfter DateTime? // les documents sont detruits apres decision
+}
+
+model ProfileVerification {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    String   @default("NONE")
+  checkedItems String @default("[]") // JSON string[] : ce qui a ete controle
+  verifiedAt DateTime?
+  agentId   String?
+}
+
+model ChurchVerification {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  churchId  String
+  church    Church   @relation(fields: [churchId], references: [id])
+  status    String   @default("NONE") // NONE | PENDING | APPROVED | REJECTED | REVOKED
+  // §28 : reponse fermee de l'eglise, aucune donnee supplementaire transmise.
+  answer    String? // CONFIRMED | NOT_KNOWN | DECLINED
+  consentAt DateTime?
+  consentRevokedAt DateTime?
+  verifiedAt DateTime?
+  respondentRole String? // ex "responsable jeunesse" — pas d'identite nominative stockee
+
+  @@index([churchId, status])
+}
+
+// ---------------------------------------------------------------------------
+// INTERACTIONS (§23, §32)
+// ---------------------------------------------------------------------------
+
+model Like {
+  id        String   @id @default(cuid())
+  fromId    String
+  from      User     @relation("LikesSent", fields: [fromId], references: [id], onDelete: Cascade)
+  toId      String
+  to        User     @relation("LikesReceived", fields: [toId], references: [id], onDelete: Cascade)
+  kind      String   @default("LIKE") // LIKE | PASS
+  message   String? // mot d'introduction optionnel
+  createdAt DateTime @default(now())
+
+  @@unique([fromId, toId])
+  @@index([toId, kind, createdAt])
+}
+
+model Match {
+  id        String   @id @default(cuid())
+  userAId   String
+  userA     User     @relation("MatchUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userBId   String
+  userB     User     @relation("MatchUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  score     Int // score de compatibilite au moment du match
+  breakdown String   @default("{}") // JSON des 7 dimensions (§20)
+  status    String   @default("ACTIVE") // ACTIVE | ARCHIVED | ENDED
+  createdAt DateTime @default(now())
+
+  conversation Conversation?
+
+  @@unique([userAId, userBId])
+  @@index([userAId, status])
+  @@index([userBId, status])
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  matchId   String   @unique
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  lastMessageAt DateTime?
+  status    String   @default("ACTIVE") // ACTIVE | ARCHIVED | CLOSED
+  createdAt DateTime @default(now())
+
+  messages Message[]
+
+  @@index([lastMessageAt])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  conversationId String
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  kind      String   @default("TEXT") // TEXT | IMAGE | VOICE | SYSTEM | ICEBREAKER
+  body      String?
+  storageKey String?
+  durationMs Int?
+  readAt    DateTime?
+  flagged   Boolean  @default(false)
+  flagReason String?
+  createdAt DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model Block {
+  id        String   @id @default(cuid())
+  blockerId String
+  blocker   User     @relation("BlocksMade", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String
+  blocked   User     @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  reporterId  String
+  reporter    User     @relation("ReportsMade", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedId  String
+  reported    User     @relation("ReportsReceived", fields: [reportedId], references: [id], onDelete: Cascade)
+  category    String // SCAM_MONEY | FAKE_PROFILE | HARASSMENT | INAPPROPRIATE | UNDERAGE | SPAM | STOLEN_PHOTOS | OTHER
+  detail      String?
+  messageId   String?
+  status      String   @default("OPEN") // OPEN | TRIAGED | ACTIONED | DISMISSED
+  severity    String   @default("NORMAL") // LOW | NORMAL | HIGH | CRITICAL
+  handledById String?
+  handledAt   DateTime?
+  outcome     String? // WARNING | RESTRICTION | SUSPENSION | BAN | NO_ACTION
+  createdAt   DateTime @default(now())
+
+  @@index([status, severity, createdAt])
+  @@index([reportedId])
+}
+
+// §34 : signaux internes. Jamais exposes publiquement.
+model TrustSignal {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String // MONEY_REQUEST | MASS_MESSAGING | DUPLICATE_DEVICE | REPORTED | PHOTO_REUSE | RAPID_OFFPLATFORM | LANGUAGE_PATTERN | POSITIVE_VERIFIED | POSITIVE_LONGEVITY
+  weight    Int // positif = confiance, negatif = risque
+  detail    String?
+  sourceRef String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([kind, createdAt])
+}
+
+model ProfileView {
+  id        String   @id @default(cuid())
+  viewerId  String
+  viewer    User     @relation("Viewer", fields: [viewerId], references: [id], onDelete: Cascade)
+  viewedId  String
+  viewed    User     @relation("Viewed", fields: [viewedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([viewerId, createdAt])
+  @@index([viewedId, createdAt])
+}
+
+// §41 : "Je vais a un rendez-vous"
+model DateCheck {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matchId       String?
+  placeLabel    String
+  scheduledAt   DateTime
+  trustedContact String? // numero d'un proche, chiffre
+  checkedInAt   DateTime?
+  checkedOutAt  DateTime?
+  status        String   @default("PLANNED") // PLANNED | ONGOING | DONE | ALERT
+  createdAt     DateTime @default(now())
+
+  @@index([userId, scheduledAt])
+}
+
+// ---------------------------------------------------------------------------
+// EVENEMENTS (§37) — V2, modelise des maintenant
+// ---------------------------------------------------------------------------
+
+model Event {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  description String
+  kind        String // SINGLES_NIGHT | SPEED_DATING | CONFERENCE | OUTING | WORKSHOP | CHURCH_EVENT
+  startsAt    DateTime
+  endsAt      DateTime?
+  venueLabel  String
+  countryCode String
+  country     Country  @relation(fields: [countryCode], references: [code])
+  cityId      String?
+  city        City?    @relation(fields: [cityId], references: [id])
+  churchId    String?
+  church      Church?  @relation(fields: [churchId], references: [id])
+  capacity    Int?
+  priceCents  Int      @default(0)
+  currency    String   @default("XOF")
+  status      String   @default("DRAFT") // DRAFT | PUBLISHED | CANCELLED | DONE
+  createdAt   DateTime @default(now())
+
+  registrations EventRegistration[]
+
+  @@index([status, startsAt])
+  @@index([cityId, startsAt])
+}
+
+model EventRegistration {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    String   @default("REGISTERED") // REGISTERED | WAITLIST | CANCELLED | ATTENDED
+  paymentId String?
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, userId])
+}
+
+// ---------------------------------------------------------------------------
+// MONETISATION (§42, §43)
+// ---------------------------------------------------------------------------
+
+model Plan {
+  code         String  @id // FREE | PREMIUM_1M | PREMIUM_3M | PREMIUM_12M
+  nameFr       String
+  priceCents   Int
+  currency     String  @default("XOF")
+  durationDays Int
+  isActive     Boolean @default(true)
+  featuresJson String  @default("[]")
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planCode  String
+  plan      Plan     @relation(fields: [planCode], references: [code])
+  status    String   @default("PENDING") // PENDING | ACTIVE | EXPIRED | CANCELLED | GRACE
+  startsAt  DateTime?
+  endsAt    DateTime?
+  autoRenew Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  payments Payment[]
+
+  @@index([userId, status])
+  @@index([status, endsAt])
+}
+
+model Payment {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+  provider       String // TMONEY | FLOOZ | MTN_MOMO | MOOV_MONEY | ORANGE_MONEY | WAVE | CARD | SIMULATED
+  providerRef    String?
+  amountCents    Int
+  currency       String   @default("XOF")
+  status         String   @default("INITIATED") // INITIATED | PENDING | SUCCEEDED | FAILED | REFUNDED
+  failureReason  String?
+  idempotencyKey String   @unique
+  rawPayload     String? // reponse fournisseur, sans donnee de carte
+  createdAt      DateTime @default(now())
+  completedAt    DateTime?
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// NOTIFICATIONS (§46)
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String // NEW_MATCH | NEW_MESSAGE | RECOMMENDATION | EVENT | VERIFICATION | SUBSCRIPTION | SAFETY
+  title     String
+  body      String
+  href      String?
+  channel   String   @default("INAPP") // INAPP | PUSH | SMS | EMAIL
+  readAt    DateTime?
+  sentAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId, readAt, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// COUCHE IA (§9 a §15, §40)
+// ---------------------------------------------------------------------------
+
+model AIConversation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose   String   @default("ONBOARDING") // ONBOARDING | BIO_IMPROVE | ICEBREAKER | COACH
+  state     String   @default("{}") // JSON de la machine a etats
+  turnCount Int      @default(0)
+  provider  String?
+  model     String?
+  tokensIn  Int      @default(0)
+  tokensOut Int      @default(0)
+  completedAt DateTime?
+  createdAt DateTime @default(now())
+
+  answers     AIAnswer[]
+  extractions AIProfileExtraction[]
+
+  @@index([userId, purpose])
+}
+
+model AIAnswer {
+  id        String   @id @default(cuid())
+  conversationId String
+  conversation AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role      String // ASSISTANT | USER
+  content   String
+  inputMode String   @default("TEXT") // TEXT | VOICE
+  transcriptEdited Boolean @default(false)
+  turnIndex Int
+  createdAt DateTime @default(now())
+
+  @@index([conversationId, turnIndex])
+}
+
+// §13 : chaque champ extrait porte sa confiance et sa citation source.
+model AIProfileExtraction {
+  id        String   @id @default(cuid())
+  conversationId String
+  conversation AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  targetModel String // Profile | FaithProfile | MarriageVision | ...
+  field     String
+  valueJson String
+  confidence Float // 0-1
+  sourceQuote String? // extrait exact des propos de l'utilisateur
+  status    String   @default("PROPOSED") // PROPOSED | NEEDS_CONFIRMATION | CONFIRMED | REJECTED | APPLIED
+  createdAt DateTime @default(now())
+
+  @@index([conversationId, status])
+}
+
+model AIRecommendation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetId  String
+  score     Int
+  breakdown String   @default("{}")
+  reason    String?
+  shownAt   DateTime?
+  actedAt   DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@unique([userId, targetId])
+}
+
+// ---------------------------------------------------------------------------
+// CONTENU (§38, §55)
+// ---------------------------------------------------------------------------
+
+model Article {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  excerpt     String
+  body        String
+  category    String // RELATIONS | MARRIAGE | PREPARATION | COMMUNICATION | FAMILY | SPIRITUALITY | SAFETY
+  coverKey    String?
+  status      String   @default("DRAFT") // DRAFT | PUBLISHED
+  publishedAt DateTime?
+  seoTitle    String?
+  seoDescription String?
+  createdAt   DateTime @default(now())
+
+  @@index([status, publishedAt])
+}
+
+model Testimonial {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  displayName String
+  cityLabel String?
+  body      String
+  outcome   String? // RELATIONSHIP | ENGAGEMENT | MARRIAGE  (§53 : declaratif volontaire)
+  consentPublic Boolean @default(false)
+  status    String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// ADMINISTRATION (§35, §36, §50, §51)
+// ---------------------------------------------------------------------------
+
+model AdminUser {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName String
+  roleCode  String
+  role      AdminRole @relation(fields: [roleCode], references: [code])
+  mfaSecretEnc String? // §50 : MFA obligatoire pour tout role interne
+  mfaEnabledAt DateTime?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  actions  AdminAction[]
+  requests VerificationRequest[]
+}
+
+model AdminRole {
+  code        String @id // SUPER_ADMIN | ADMIN | MODERATOR | VERIFICATION_AGENT | SUPPORT | ANALYST
+  nameFr      String
+  permissionsJson String @default("[]") // liste de permissions explicites (deny by default)
+
+  admins AdminUser[]
+}
+
+model AdminAction {
+  id        String   @id @default(cuid())
+  adminId   String
+  admin     AdminUser @relation(fields: [adminId], references: [id])
+  action    String
+  targetType String
+  targetId  String
+  reason    String?
+  metadata  String?
+  createdAt DateTime @default(now())
+
+  @@index([adminId, createdAt])
+  @@index([targetType, targetId])
+}
+
+// §47 : journal d'audit. Identifiants pseudonymises, conserves apres suppression.
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorRef  String // hash pseudonymise
+  actorType String // USER | ADMIN | SYSTEM
+  event     String
+  targetRef String?
+  ipHash    String?
+  userAgent String?
+  metadata  String?
+  createdAt DateTime @default(now())
+
+  @@index([event, createdAt])
+  @@index([actorRef, createdAt])
+}
+
+model RateLimitCounter {
+  id        String   @id
+  count     Int      @default(0)
+  windowEnd DateTime
+
+  @@index([windowEnd])
+}

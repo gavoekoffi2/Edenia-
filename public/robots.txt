@@ -1,0 +1,8 @@
+# §54 : les pages publiques sont indexables, l'application ne l'est pas.
+User-agent: *
+Allow: /
+Disallow: /app/
+Disallow: /admin/
+Disallow: /api/
+
+Sitemap: /sitemap.xml

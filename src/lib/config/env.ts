@@ -59,7 +59,13 @@ function load() {
 
   const env = parsed.data;
 
-  if (env.NODE_ENV === "production") {
+  // `next build` s'execute avec NODE_ENV=production, mais un build n'a pas
+  // besoin des secrets de production — les exiger la casserait toute chaine
+  // d'integration. Le controle reste applique au demarrage du serveur, qui est
+  // le moment ou un secret faible devient reellement dangereux.
+  const isBuildPhase = raw.NEXT_PHASE === "phase-production-build";
+
+  if (env.NODE_ENV === "production" && !isBuildPhase) {
     if (env.AI_PROVIDER === "anthropic" && !env.ANTHROPIC_API_KEY) {
       throw new Error("AI_PROVIDER=anthropic exige ANTHROPIC_API_KEY.");
     }

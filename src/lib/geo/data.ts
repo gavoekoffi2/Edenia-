@@ -310,6 +310,40 @@ export const COUNTRIES: CountrySeed[] = [
       },
     ],
   },
+  {
+    code: "TD",
+    nameFr: "Tchad",
+    dialCode: "+235",
+    currency: "XAF",
+    isLaunched: false,
+    isAfrican: true,
+    isFrancophone: true,
+    launchOrder: 13,
+    regions: [
+      {
+        slug: "ndjamena",
+        nameFr: "N'Djaména",
+        cities: [{ slug: "ndjamena", nameFr: "N'Djaména", lat: 12.1348, lng: 15.0557, population: 1_600_000 }],
+      },
+    ],
+  },
+  {
+    code: "CF",
+    nameFr: "République centrafricaine",
+    dialCode: "+236",
+    currency: "XAF",
+    isLaunched: false,
+    isAfrican: true,
+    isFrancophone: true,
+    launchOrder: 14,
+    regions: [
+      {
+        slug: "bangui",
+        nameFr: "Bangui",
+        cities: [{ slug: "bangui", nameFr: "Bangui", lat: 4.3947, lng: 18.5582, population: 890_000 }],
+      },
+    ],
+  },
   // §23 — la diaspora est une cible explicite, pas un effet de bord.
   {
     code: "FR",
@@ -369,7 +403,42 @@ export const COUNTRIES: CountrySeed[] = [
   },
 ];
 
-export const LAUNCHED_COUNTRIES = COUNTRIES.filter((c) => c.isLaunched).map((c) => c.code);
+/**
+ * Pays effectivement ouverts.
+ *
+ * La liste vient de `LAUNCHED_COUNTRIES` (variable d'environnement), ce qui
+ * permet d'ouvrir un marche **sans redeploiement de code** : le lancement
+ * commercial est une decision produit, pas une modification logicielle.
+ * A defaut, on retombe sur `isLaunched` du referentiel — Togo seul aujourd'hui.
+ *
+ *   LAUNCHED_COUNTRIES="TG"           -> pilote Togo (defaut)
+ *   LAUNCHED_COUNTRIES="TG,BJ,CI"     -> ouverture Benin + Cote d'Ivoire
+ *   LAUNCHED_COUNTRIES="AFRIQUE_FR"   -> toute l'Afrique francophone
+ */
+function resolveLaunchedCountries(): string[] {
+  const raw = (process.env.LAUNCHED_COUNTRIES ?? "").trim();
+
+  if (raw.toUpperCase() === "AFRIQUE_FR") {
+    return COUNTRIES.filter((c) => c.isAfrican && c.isFrancophone).map((c) => c.code);
+  }
+
+  if (raw) {
+    const known = new Set(COUNTRIES.map((c) => c.code));
+    const requested = raw
+      .split(",")
+      .map((code) => code.trim().toUpperCase())
+      .filter((code) => known.has(code));
+    if (requested.length > 0) return requested;
+  }
+
+  return COUNTRIES.filter((c) => c.isLaunched).map((c) => c.code);
+}
+
+export const LAUNCHED_COUNTRIES = resolveLaunchedCountries();
+
+export function isCountryLaunched(code: string): boolean {
+  return LAUNCHED_COUNTRIES.includes(code.toUpperCase());
+}
 
 export const FRANCOPHONE_AFRICA = COUNTRIES.filter((c) => c.isAfrican && c.isFrancophone).map((c) => c.code);
 
@@ -402,7 +471,7 @@ export const PILOT_COUNTRY = "TG";
  */
 export function dialCodeOptions(onlyLaunched = true): CountryOption[] {
   return [...COUNTRIES]
-    .filter((c) => (onlyLaunched ? c.isLaunched : true))
+    .filter((c) => (onlyLaunched ? isCountryLaunched(c.code) : true))
     .sort((a, b) => (a.launchOrder ?? 99) - (b.launchOrder ?? 99))
     .map((c) => ({ code: c.code, nameFr: c.nameFr, dialCode: c.dialCode, flag: FLAGS[c.code] ?? "🌍" }));
 }

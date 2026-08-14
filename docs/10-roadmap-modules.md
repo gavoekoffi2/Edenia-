@@ -56,6 +56,11 @@ Par ordre de criticité :
 
 ### P1 — Avant la montée en charge
 
+0. **Budget JS non tenu.** 176 ko gzip sur le parcours principal contre 120 ko
+   visés (`docs/05` §3), soit ~3,7 s de premier chargement en 3G lente. Le
+   surcoût vient du socle React/Next, pas de notre code. Piste : rendu statique
+   sans hydratation sur les pages publiques.
+
 5. Fournisseur STT en production (l'interface est prête, le mode vocal repose
    aujourd'hui sur la Web Speech API du navigateur).
 6. Bascule PostgreSQL + index de recherche (`docs/02` §6).

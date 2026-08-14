@@ -24,6 +24,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     { href: "/admin", label: "Tableau de bord", permission: "analytics.read" as const },
     { href: "/admin/verification", label: "Vérification", permission: "verification.read" as const },
     { href: "/admin/moderation", label: "Modération", permission: "reports.read" as const },
+    { href: "/admin/paiements", label: "Paiements", permission: "payments.read" as const },
     { href: "/admin/services", label: "Services", permission: "analytics.read" as const },
   ].filter((link) => can(user.role, link.permission));
 

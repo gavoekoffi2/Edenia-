@@ -31,8 +31,20 @@ const schema = z.object({
   EMAIL_PROVIDER: z.string().default("console"),
   SMS_SENDER_ID: z.string().default("EDENIA"),
 
-  PAYMENT_PROVIDER: z.string().default("simulated"),
+  PAYMENT_PROVIDER: z.enum(["simulated", "geniuspay"]).default("simulated"),
   PAYMENT_WEBHOOK_SECRET: z.string().optional(),
+
+  // --- GeniusPay (§5-§7 de la phase d'integration) -------------------------
+  // Les cles ne vivent QUE ici, cote serveur. Aucune n'est prefixee
+  // NEXT_PUBLIC_, donc aucune ne peut traverser vers le navigateur.
+  GENIUSPAY_BASE_URL: z.string().default("https://geniuspay.ci/api/v1/merchant"),
+  /** sandbox | live — jamais melanges (§7). */
+  GENIUSPAY_ENVIRONMENT: z.enum(["sandbox", "live"]).default("sandbox"),
+  GENIUSPAY_API_KEY: z.string().optional(),
+  GENIUSPAY_API_SECRET: z.string().optional(),
+  /** Secret de signature des webhooks (whsec_...), distinct des cles API. */
+  GENIUSPAY_WEBHOOK_SECRET: z.string().optional(),
+  GENIUSPAY_TIMEOUT_MS: z.coerce.number().int().min(3000).max(60000).default(20000),
 
   STORAGE_PROVIDER: z.enum(["local", "s3"]).default("local"),
 
@@ -47,6 +59,10 @@ const DEV_FALLBACKS = {
   SESSION_SECRET: "dev-only-secret-change-in-production-0123456789abcdef",
   FIELD_ENCRYPTION_KEY: "ZGV2LW9ubHkta2V5LTMyLWJ5dGVzLWxvbmctZm9yLWFlcyE=",
   DATABASE_URL: "file:./dev.db",
+  // Permet de tester l'endpoint webhook en local, avec une vraie signature.
+  // En production, GENIUSPAY_WEBHOOK_SECRET est exige et cette valeur est
+  // refusee (voir le controle plus bas).
+  GENIUSPAY_WEBHOOK_SECRET: "whsec_sandbox_dev_local_only",
 } as const;
 
 function load() {
@@ -92,6 +108,30 @@ function load() {
     // Garde-fou le plus important de ce mode : une authentification simulee ne
     // doit jamais pouvoir tourner sur un serveur de production, meme par
     // erreur de configuration. L'application refuse de demarrer.
+    // §6/§7 : impossible de partir en production avec GeniusPay sans ses cles,
+    // et impossible de laisser l'environnement sandbox sur un site en ligne.
+    if (env.PAYMENT_PROVIDER === "geniuspay") {
+      if (!env.GENIUSPAY_API_KEY || !env.GENIUSPAY_API_SECRET) {
+        throw new Error("PAYMENT_PROVIDER=geniuspay exige GENIUSPAY_API_KEY et GENIUSPAY_API_SECRET.");
+      }
+      if (!env.GENIUSPAY_WEBHOOK_SECRET) {
+        throw new Error(
+          "GENIUSPAY_WEBHOOK_SECRET est requis : sans lui, aucun webhook ne peut etre authentifie.",
+        );
+      }
+      if (env.GENIUSPAY_WEBHOOK_SECRET === DEV_FALLBACKS.GENIUSPAY_WEBHOOK_SECRET) {
+        throw new Error(
+          "Secret webhook de developpement interdit en production : n'importe qui pourrait forger un paiement.",
+        );
+      }
+      if (env.GENIUSPAY_ENVIRONMENT === "sandbox") {
+        throw new Error("GENIUSPAY_ENVIRONMENT=sandbox interdit en production : les paiements seraient simules.");
+      }
+      if (env.GENIUSPAY_API_KEY.startsWith("pk_sandbox") || env.GENIUSPAY_API_SECRET.startsWith("sk_sandbox")) {
+        throw new Error("Cles GeniusPay sandbox detectees en production. Utilisez les cles pk_live_/sk_live_.");
+      }
+    }
+
     if (env.AUTH_MODE === "development") {
       throw new Error(
         "AUTH_MODE=development est interdit en production : l'OTP serait previsible. " +

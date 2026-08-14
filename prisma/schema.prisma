@@ -754,8 +754,11 @@ model Plan {
   durationDays Int
   isActive     Boolean @default(true)
   featuresJson String  @default("[]")
+  /** §14 : renouvellement mensuel possible quand l'agregateur le supporte. */
+  isRecurring  Boolean @default(false)
 
   subscriptions Subscription[]
+  payments      Payment[]
 }
 
 model Subscription {
@@ -768,7 +771,10 @@ model Subscription {
   startsAt  DateTime?
   endsAt    DateTime?
   autoRenew Boolean  @default(false)
+  cancelledAt DateTime?
+  cancelReason String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   payments Payment[]
 
@@ -782,19 +788,92 @@ model Payment {
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   subscriptionId String?
   subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
-  provider       String // TMONEY | FLOOZ | MTN_MOMO | MOOV_MONEY | ORANGE_MONEY | WAVE | CARD | SIMULATED
+  planCode       String?
+  plan           Plan?    @relation(fields: [planCode], references: [code])
+
+  /** Agregateur : GENIUSPAY | SIMULATED. Le moyen final est dans `method`. */
+  gateway        String   @default("SIMULATED")
+  /** Moyen de paiement effectif, rendu par l'agregateur apres le checkout. */
+  method         String?
+  /** Reference cote agregateur — la cle de rapprochement financier. */
   providerRef    String?
+  /** Reference interne EDENIA, transmise en metadata. */
+  orderRef       String   @unique
+  /** Environnement de la transaction : sandbox | production. Jamais melanges. */
+  environment    String   @default("sandbox")
+
   amountCents    Int
   currency       String   @default("XOF")
-  status         String   @default("INITIATED") // INITIATED | PENDING | SUCCEEDED | FAILED | REFUNDED
+  /** §13 : PENDING | PROCESSING | COMPLETED | FAILED | CANCELLED | REFUNDED | EXPIRED */
+  status         String   @default("PENDING")
   failureReason  String?
+  checkoutUrl    String?
   idempotencyKey String   @unique
-  rawPayload     String? // reponse fournisseur, sans donnee de carte
+  /** Charge utile fournisseur, expurgee de toute donnee de carte. */
+  rawPayload     String?
   createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
   completedAt    DateTime?
+  refundedAt     DateTime?
+
+  transactions PaymentTransaction[]
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
+  @@index([providerRef])
+  @@index([gateway, environment, createdAt])
+}
+
+/**
+ * Journal des evenements d'un paiement.
+ *
+ * Un paiement a un statut ; ce journal garde la trace de **chaque** transition,
+ * avec l'evenement fournisseur qui l'a provoquee. Sans lui, un litige avec un
+ * agregateur se regle a l'aveugle.
+ */
+model PaymentTransaction {
+  id          String   @id @default(cuid())
+  paymentId   String
+  payment     Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  /** CREATED | CHECKOUT_OPENED | WEBHOOK | STATUS_POLL | MANUAL */
+  source      String
+  event       String?
+  fromStatus  String?
+  toStatus    String
+  amountCents Int?
+  currency    String?
+  method      String?
+  providerRef String?
+  /** Identifiant de livraison du webhook — cle d'idempotence (§12). */
+  deliveryId  String?
+  rawPayload  String?
+  createdAt   DateTime @default(now())
+
+  @@index([paymentId, createdAt])
+  @@unique([paymentId, deliveryId])
+}
+
+/**
+ * §12 — idempotence des webhooks.
+ *
+ * Un evenement deja traite est reconnu et ignore. La contrainte d'unicite fait
+ * le travail : deux livraisons du meme evenement ne peuvent pas creer deux
+ * abonnements.
+ */
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  gateway     String
+  /** Identifiant fourni par l'agregateur, ou empreinte de la charge utile. */
+  deliveryId  String
+  event       String
+  environment String
+  payloadHash String
+  status      String   @default("PROCESSED") // PROCESSED | IGNORED | FAILED
+  detail      String?
+  receivedAt  DateTime @default(now())
+
+  @@unique([gateway, deliveryId])
+  @@index([event, receivedAt])
 }
 
 // ---------------------------------------------------------------------------

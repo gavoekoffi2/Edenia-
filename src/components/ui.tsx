@@ -130,8 +130,14 @@ export function Avatar({
   size?: number;
 }) {
   if (url) {
-    // eslint-disable-next-line @next/next/no-img-element
     return (
+      /*
+       * `next/image` est volontairement ecarte ici : nos photos sont deja
+       * redimensionnees et reencodees en WebP au televersement, et servies par
+       * notre route /media. Les repasser dans l'optimiseur les recompresserait
+       * une seconde fois, sans gain, avec un cout serveur a chaque requete.
+       */
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={url}
         alt={firstName}

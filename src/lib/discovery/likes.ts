@@ -4,6 +4,7 @@ import { candidateInclude, toCandidate, type CandidateRow } from "@/lib/matching
 import { dailyLikeLimit, type Tier } from "@/lib/premium/entitlements";
 import { TEMPLATES } from "@/lib/notifications";
 import { trustEffects } from "@/lib/trust/signals";
+import { premiumStatus } from "@/lib/payments/service";
 
 /**
  * §23, §32 — likes et matchs.
@@ -167,10 +168,11 @@ export async function remainingLikes(userId: string, tier: Tier): Promise<number
   return Math.max(0, dailyLikeLimit(tier) - used);
 }
 
+/**
+ * Palier de l'utilisateur, derive de l'abonnement reel — jamais d'un booleen
+ * « isPremium » (§14). Une seule source de verite : `premiumStatus`.
+ */
 export async function currentTier(userId: string): Promise<Tier> {
-  const subscription = await prisma.subscription.findFirst({
-    where: { userId, status: "ACTIVE", endsAt: { gte: new Date() } },
-    select: { id: true },
-  });
-  return subscription ? "PREMIUM" : "FREE";
+  const { isPremium } = await premiumStatus(userId);
+  return isPremium ? "PREMIUM" : "FREE";
 }

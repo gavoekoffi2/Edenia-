@@ -6,7 +6,6 @@ import { validatePhone } from "@/lib/geo/phone";
 import {
   maskDestination,
   normalizeEmail,
-  normalizePhone,
   requestOtp,
   verifyOtp,
   type OtpChannel,

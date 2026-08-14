@@ -106,6 +106,9 @@ async function seedRolesAndPlans() {
         priceCents: offer.priceCents,
         currency: offer.currency,
         durationDays: offer.durationDays,
+        // §14 : reconduction possible quand l'agregateur la supportera. Aucune
+        // offre n'est reconduite automatiquement sans accord explicite.
+        isRecurring: false,
         featuresJson: JSON.stringify([
           "Filtre « profils vérifiés »",
           "Filtres avancés",

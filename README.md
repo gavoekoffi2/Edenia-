@@ -40,7 +40,8 @@ de l'API et affiché à l'écran.
 | Commande | Rôle |
 |---|---|
 | `npm run dev` | Serveur de développement |
-| `npm test` | 111 tests (matching, IA, confidentialité, sécurité, mode pilote) |
+| `npm test` | 134 tests (matching, IA, confidentialité, sécurité, paiement) |
+| `npm run lint` | ESLint (0 erreur, 0 avertissement) |
 | `npm run typecheck` | Vérification TypeScript |
 | `npm run build` | Build de production |
 | `npm run db:reset` | Réinitialise la base (référentiels seuls) |
@@ -65,9 +66,11 @@ Back-office : `admin@edenia.app` (super administrateur) et
 | **PWA** | Installable, optimisée 3G et téléphones d'entrée de gamme — [`docs/05`](docs/05-pwa.md) |
 | **Site public** | 16 pages rédigées et optimisées SEO |
 
-Reste à faire avant une ouverture au public : agrégateur Mobile Money réel,
-passerelle SMS réelle, modération automatique des images, durcissement final.
-Détail et priorités dans [`docs/10`](docs/10-roadmap-modules.md).
+| **Paiement** | GeniusPay : checkout hébergé, webhook signé HMAC, idempotence, machine d'état — [`docs/12`](docs/12-geniuspay.md) |
+
+Reste à faire avant une ouverture au public : clés GeniusPay live, passerelle SMS
+réelle, modération automatique des images, budget JS (176 ko contre 120 ko
+visés), durcissement final. Détail dans [`docs/10`](docs/10-roadmap-modules.md).
 
 ---
 
@@ -104,6 +107,12 @@ membres inscrits.
 Le format local (« 90 12 34 56 ») est accepté et complété avec l'indicatif du
 pays choisi.
 
+**Le paiement n'active rien tant que le backend ne l'a pas confirmé.** Le retour
+sur `success_url` ne prouve rien — n'importe qui peut ouvrir cette URL. Premium
+n'est activé que sur un webhook signé ou une consultation directe de
+l'agrégateur. Le traitement est idempotent : deux livraisons du même événement
+ne créent pas deux abonnements.
+
 **Aucune police web.** Le stack système coûte 0 ko ; une police Google coûte
 150 à 250 ko avant le premier texte lisible. Sur une 3G à 400 kbit/s, c'est
 l'optimisation la plus rentable — et personne ne remarque l'absence.
@@ -113,9 +122,9 @@ l'optimisation la plus rentable — et personne ne remarque l'absence.
 ## Architecture
 
 ```
-docs/            00 → 11 : analyse, architecture, données, parcours, design,
+docs/            00 → 12 : analyse, architecture, données, parcours, design,
                  PWA, IA, matching, vérification, sécurité, feuille de route,
-                 phase pilote
+                 phase pilote, GeniusPay
 prisma/          Schéma (50 entités, portable SQLite ↔ PostgreSQL) + seed
 src/app/         Pages publiques, application, back-office, API /api/v1/**
 src/components/  Composants d'interface
@@ -125,11 +134,11 @@ src/lib/         Logique métier, sans dépendance à React ni à HTTP
   auth/          OTP, sessions, RBAC, limitation de débit
   trust/         Anti-arnaque, score interne
   verification/  Niveaux, listes de contrôle, question église
-  payments/      Interface multi-fournisseurs Mobile Money
+  payments/      GeniusPay : client, webhook signé, machine d'état
   storage/       Traitement et stockage des photos
   geo/           Référentiel pays/régions/villes + règles de numérotation
   db/            Client Prisma + frontière de sérialisation publique
-tests/           111 tests
+tests/           134 tests
 ```
 
 Pile : Next.js 16 (App Router) · React 19 · TypeScript strict · Tailwind CSS v4 ·

@@ -1,85 +1,30 @@
 import { z } from "zod";
-import { PAYMENT_PROVIDER } from "@/lib/config/enums";
 import { requireUser } from "@/lib/auth/current-user";
-import { prisma } from "@/lib/db/client";
-import { getPaymentProvider, idempotencyKeyFor } from "@/lib/payments/provider";
-import { normalizePhone } from "@/lib/auth/otp";
+import { rateLimit } from "@/lib/auth/ratelimit";
+import { createCheckout } from "@/lib/payments/service";
 import { fail, handler, ok, parseBody } from "@/lib/api/respond";
 
-const schema = z.object({
-  planCode: z.string().min(1),
-  provider: z.enum(PAYMENT_PROVIDER),
-  payerPhone: z.string().min(6).max(20),
-});
+const schema = z.object({ planCode: z.string().min(1).max(40) });
 
+/**
+ * §8 — création d'une transaction, puis redirection vers le checkout hébergé.
+ *
+ * EDENIA ne collecte aucune donnée de paiement : ni numéro de carte, ni CVV,
+ * ni code Mobile Money (§17). Le moyen de paiement est choisi chez GeniusPay.
+ */
 export const POST = handler(async (request) => {
   const user = await requireUser();
   const body = await parseBody(request, schema);
 
-  const [plan, profile] = await Promise.all([
-    prisma.plan.findUnique({ where: { code: body.planCode } }),
-    prisma.profile.findUnique({ where: { userId: user.id }, select: { countryCode: true } }),
-  ]);
+  const limit = await rateLimit(`pay:${user.id}`, 10, 3_600_000);
+  if (!limit.allowed) return fail("Trop de tentatives de paiement. Réessayez plus tard.", 429);
 
-  if (!plan?.isActive) return fail("Cette offre n'est pas disponible.", 404);
-
-  const phone = normalizePhone(body.payerPhone, profile?.countryCode ?? "TG");
-  if (!phone) return fail("Ce numéro ne semble pas valide.", 400);
-
-  // Idempotence : un double appui sur « Payer » ne débite jamais deux fois.
-  const idempotencyKey = idempotencyKeyFor(user.id, plan.code);
-  const existing = await prisma.payment.findUnique({ where: { idempotencyKey } });
-  if (existing) {
-    return ok({
-      paymentId: existing.id,
-      status: existing.status,
-      message: "Un paiement est déjà en cours pour cette offre.",
-    });
-  }
-
-  const subscription = await prisma.subscription.create({
-    data: { userId: user.id, planCode: plan.code, status: "PENDING" },
-  });
-
-  const payment = await prisma.payment.create({
-    data: {
-      userId: user.id,
-      subscriptionId: subscription.id,
-      provider: body.provider,
-      amountCents: plan.priceCents,
-      currency: plan.currency,
-      status: "INITIATED",
-      idempotencyKey,
-    },
-  });
-
-  const result = await getPaymentProvider().initiate({
-    idempotencyKey,
-    userId: user.id,
-    amountCents: plan.priceCents,
-    currency: plan.currency,
-    planCode: plan.code,
-    payerPhone: phone,
-  });
-
-  await prisma.payment.update({
-    where: { id: payment.id },
-    data: {
-      status: result.status,
-      providerRef: result.providerRef,
-      failureReason: result.failureReason ?? null,
-    },
-  });
-
-  if (result.status === "FAILED") {
-    await prisma.subscription.update({ where: { id: subscription.id }, data: { status: "CANCELLED" } });
-    return fail(result.failureReason ?? "Le paiement a échoué.", 402);
-  }
+  const result = await createCheckout({ userId: user.id, planCode: body.planCode });
+  if (!result.ok) return fail(result.error, 402, { code: result.code });
 
   return ok({
-    paymentId: payment.id,
-    status: result.status,
-    userInstruction: result.userInstruction,
-    redirectUrl: result.redirectUrl,
+    orderRef: result.orderRef,
+    checkoutUrl: result.checkoutUrl,
+    simulated: result.simulated,
   });
 });

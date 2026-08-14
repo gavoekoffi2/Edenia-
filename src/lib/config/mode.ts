@@ -72,12 +72,16 @@ export function serviceStatuses(): ServiceStatus[] {
     {
       key: "payments",
       label: "Paiement",
-      mode: env.PAYMENT_PROVIDER === "simulated" ? "development" : "production",
+      mode:
+        env.PAYMENT_PROVIDER === "simulated" || env.GENIUSPAY_ENVIRONMENT === "sandbox"
+          ? "development"
+          : "production",
       detail:
         env.PAYMENT_PROVIDER === "simulated"
-          ? "Paiement simulé. Aucun débit réel, aucun agrégateur Mobile Money branché."
-          : `Fournisseur : ${env.PAYMENT_PROVIDER}.`,
-      pendingRealIntegration: env.PAYMENT_PROVIDER === "simulated",
+          ? "Paiement simulé. Aucun débit réel, aucun agrégateur branché. Le webhook est néanmoins signé et traverse le code de production."
+          : `GeniusPay — environnement « ${env.GENIUSPAY_ENVIRONMENT} »` +
+            (env.GENIUSPAY_ENVIRONMENT === "sandbox" ? ". Transactions simulées par GeniusPay." : ". Transactions réelles."),
+      pendingRealIntegration: env.PAYMENT_PROVIDER === "simulated" || env.GENIUSPAY_ENVIRONMENT === "sandbox",
     },
     {
       key: "ai",

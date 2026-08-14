@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { REPORT_CATEGORY, REPORT_CATEGORY_LABEL, type ReportCategory } from "@/lib/config/enums";
 
@@ -82,9 +83,9 @@ export function ProfileActions({ targetId, firstName }: { targetId: string; firs
         <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
           {message}
         </p>
-        <a href="/app/messages" className="e-btn e-btn-primary mt-3">
+        <Link href="/app/messages" className="e-btn e-btn-primary mt-3">
           Voir la conversation
-        </a>
+        </Link>
       </div>
     );
   }

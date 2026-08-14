@@ -44,7 +44,6 @@ export function OnboardingChat() {
     started.current = true;
     void send(null);
     setVoice((state) => ({ ...state, supported: hasSpeechRecognition() }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

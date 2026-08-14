@@ -25,15 +25,37 @@ Ce dernier point est une décision de confidentialité autant que de fraîcheur 
 aucune donnée personnelle ne doit se retrouver dans un cache persistant sur un
 téléphone potentiellement partagé.
 
-## 3. Budget de performance (§45)
+## 3. Budget de performance (§45) — mesures réelles
 
-| Métrique | Cible | Mesure |
-|---|---|---|
-| First Load JS, parcours principal | < 120 ko | `next build` |
-| LCP en 3G simulée | < 2,5 s | Lighthouse, throttling « Slow 4G » |
-| CSS total | < 20 ko | Tailwind purgé |
-| Polices | **0 ko** | Stack système |
-| Images de profil | ≤ 80 ko en AVIF/WebP | Redimensionnement au téléversement |
+Mesuré sur le build de production, transfert gzip, scripts et styles inclus :
+
+| Page | HTML | JS | CSS | Total | ~3G lente (400 kbit/s) |
+|---|---|---|---|---|---|
+| `/` (accueil) | 7,4 ko | 171,6 ko | 5,4 ko | **184,3 ko** | ~3,7 s |
+| `/inscription` | 3,7 ko | 176,6 ko | 5,4 ko | **185,7 ko** | ~3,7 s |
+| `/app/decouvrir` | 3,6 ko | 176,6 ko | 5,4 ko | **185,6 ko** | ~3,7 s |
+| `/tarifs` | 6,6 ko | 171,6 ko | 5,4 ko | **183,5 ko** | ~3,7 s |
+
+| Métrique | Cible | Réel | Verdict |
+|---|---|---|---|
+| JS du parcours principal | < 120 ko gzip | **176 ko** | ❌ **cible non tenue** |
+| CSS total | < 20 ko | 5,4 ko | ✅ |
+| Polices web | 0 ko | 0 ko | ✅ |
+| Photo de profil traitée | ≤ 80 ko | ~1,6 ko (WebP 1080 px) | ✅ |
+
+**Le budget JS n'est pas atteint, et il faut le dire.** Les 176 ko sont
+essentiellement le socle React 19 + Next.js 16 : nos propres composants pèsent
+peu, et les pages sont déjà majoritairement des composants serveur. Descendre
+sous 120 ko demanderait de sortir du framework sur les pages publiques (rendu
+statique sans hydratation), pas de retoucher notre code.
+
+Décision retenue : on assume ~3,7 s de premier chargement en 3G lente, en
+notant que la coque est ensuite mise en cache par le service worker et que les
+visites suivantes ne rechargent pas ce socle. Le point est inscrit comme
+chantier P1 dans `docs/10`.
+
+Ce qui a bien fonctionné : le refus des polices web (0 ko au lieu de 150-250 ko)
+et le traitement des photos — une image de 1400 × 1000 pixels descend à 1,6 ko.
 
 Moyens :
 - rendu serveur pour les pages publiques (SEO + premier octet rapide) ;

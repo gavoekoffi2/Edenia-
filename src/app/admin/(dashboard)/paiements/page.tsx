@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
-import { requirePermission } from "@/lib/auth/current-user";
+import { requireAdminPage } from "@/lib/admin/guard";
 import { prisma } from "@/lib/db/client";
 import { formatXof } from "@/lib/premium/entitlements";
 import { PAYMENT_STATUSES, STATUS_LABEL, type PaymentStatus } from "@/lib/payments/status";
@@ -20,7 +20,7 @@ export default async function Page({
 }: {
   searchParams: Promise<{ q?: string; status?: string }>;
 }) {
-  await requirePermission("payments.read");
+  await requireAdminPage("payments.read");
   const params = await searchParams;
 
   const query = (params.q ?? "").trim();

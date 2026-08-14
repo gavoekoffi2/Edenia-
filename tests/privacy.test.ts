@@ -8,7 +8,13 @@ import {
   toPublicProfile,
   type SerializableUser,
 } from "@/lib/db/serialize";
-import { NEVER_PAYWALLED, hasCapability } from "@/lib/premium/entitlements";
+import {
+  CAPABILITIES,
+  NEVER_PAYWALLED,
+  dailyLikeLimit,
+  hasCapability,
+  railLimit,
+} from "@/lib/premium/entitlements";
 import { can, permissionsFor } from "@/lib/auth/rbac";
 import { computeTrustScore, scanMessage, trustBand, trustEffects } from "@/lib/trust/signals";
 import { isZeroTolerance, recommendSanction } from "@/lib/moderation/sanctions";
@@ -158,10 +164,20 @@ describe("Premium ne vend jamais la sécurité (§31, §60, C2)", () => {
     expect(hasCapability("FREE", "match.chat")).toBe(true);
   });
 
-  it("réserve seulement le confort à Premium", () => {
-    expect(hasCapability("FREE", "discovery.advanced_filters")).toBe(false);
-    expect(hasCapability("PREMIUM", "discovery.advanced_filters")).toBe(true);
-    expect(hasCapability("FREE", "discovery.filter_verified_only")).toBe(false);
+  it("réserve seulement le confort à Premium, quand Premium existe", () => {
+    // Régime « premium » explicite : la grille doit rester correcte le jour où
+    // on la rallume, même si personne ne la voit pendant le lancement gratuit.
+    expect(hasCapability("FREE", "discovery.advanced_filters", false)).toBe(false);
+    expect(hasCapability("PREMIUM", "discovery.advanced_filters", false)).toBe(true);
+    expect(hasCapability("FREE", "discovery.filter_verified_only", false)).toBe(false);
+  });
+
+  it("n'oppose aucun refus pendant le lancement gratuit (§1)", () => {
+    for (const capability of CAPABILITIES) {
+      expect(hasCapability("FREE", capability, true)).toBe(true);
+    }
+    expect(dailyLikeLimit("FREE", true)).toBe(dailyLikeLimit("PREMIUM", true));
+    expect(railLimit("FREE", "verified", true)).toBe(railLimit("PREMIUM", "verified", true));
   });
 
   it("respecte la règle produit : la vérification est gratuite", () => {
@@ -177,13 +193,13 @@ describe("RBAC — refus par défaut (§36, §50)", () => {
   });
 
   it("limite l'agent de vérification à son périmètre (§36)", () => {
-    expect(can("VERIFICATION_AGENT", "verification.decide")).toBe(true);
-    expect(can("VERIFICATION_AGENT", "verification.read_documents")).toBe(true);
+    expect(can("VERIFIER", "verification.decide")).toBe(true);
+    expect(can("VERIFIER", "verification.read_documents")).toBe(true);
     // « Il ne doit pas avoir accès aux fonctions inutiles. »
-    expect(can("VERIFICATION_AGENT", "messages.read_flagged")).toBe(false);
-    expect(can("VERIFICATION_AGENT", "payments.read")).toBe(false);
-    expect(can("VERIFICATION_AGENT", "users.ban")).toBe(false);
-    expect(can("VERIFICATION_AGENT", "admins.manage")).toBe(false);
+    expect(can("VERIFIER", "messages.read_flagged")).toBe(false);
+    expect(can("VERIFIER", "payments.read")).toBe(false);
+    expect(can("VERIFIER", "users.ban")).toBe(false);
+    expect(can("VERIFIER", "admins.manage")).toBe(false);
   });
 
   it("empêche un modérateur de lire les pièces d'identité", () => {

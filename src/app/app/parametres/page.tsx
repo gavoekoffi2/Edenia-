@@ -3,12 +3,15 @@ import { requireUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db/client";
 import { PreferencesForm } from "@/components/preferences-form";
 import { AccountActions } from "@/components/account-actions";
+import { premiumIsPublic } from "@/lib/config/monetization";
+import { donationsOpen } from "@/lib/donations/service";
 
 export const metadata = { title: "Paramètres", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
   const user = await requireUser();
+  const showDonate = !premiumIsPublic && (await donationsOpen());
 
   const [preferences, dealbreakers, consents] = await Promise.all([
     prisma.preferences.findUnique({ where: { userId: user.id } }),
@@ -60,14 +63,28 @@ export default async function Page() {
         </p>
       </section>
 
-      <div className="e-card p-4">
-        <Link href="/app/premium" className="font-semibold text-sm">
-          ✦ EDENIA Premium
-        </Link>
-        <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
-          Filtres avancés et compatibilité détaillée. Aucun badge, aucune priorité de vérification.
-        </p>
-      </div>
+      {premiumIsPublic ? (
+        <div className="e-card p-4">
+          <Link href="/app/premium" className="font-semibold text-sm">
+            ✦ EDENIA Premium
+          </Link>
+          <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
+            Filtres avancés et compatibilité détaillée. Aucun badge, aucune priorité de vérification.
+          </p>
+        </div>
+      ) : (
+        showDonate && (
+          <div className="e-card p-4">
+            <Link href="/soutenir" className="font-semibold text-sm">
+              ❤️ Soutenir EDENIA
+            </Link>
+            <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
+              EDENIA est gratuite. Un don ne débloque rien — il finance l&apos;hébergement, la modération
+              et la vérification des profils.
+            </p>
+          </div>
+        )
+      )}
 
       <AccountActions />
     </div>

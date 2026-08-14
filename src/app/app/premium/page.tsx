@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
+import { premiumIsPublic } from "@/lib/config/monetization";
 import { requireUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db/client";
 import { PLAN_OFFERS, formatXof } from "@/lib/premium/entitlements";
@@ -20,7 +22,14 @@ const FEATURES = [
   { icon: "📈", title: "Plus de likes", body: "100 par jour au lieu de 20." },
 ];
 
+/**
+ * §1 du sprint final — en lancement gratuit, cette page n'existe pas pour les
+ * membres. Le code reste en place, non pas commente mais eteint : rallumer
+ * Premium tient a une variable d'environnement, sans redeploiement de schema
+ * ni reecriture d'ecran.
+ */
 export default async function Page() {
+  if (!premiumIsPublic) notFound();
   const user = await requireUser();
   const [premium, history] = await Promise.all([
     premiumStatus(user.id),

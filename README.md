@@ -7,7 +7,11 @@ Plateforme PWA de rencontres chrétiennes pour l'Afrique francophone.
 
 ---
 
-## Phase actuelle : test interne, marché pilote 🇹🇬 Togo
+## Phase actuelle : bêta fermée, marché pilote 🇹🇬 Togo
+
+**EDENIA est gratuite.** Pas d'abonnement, pas de fonctionnalité réservée. La
+plateforme vit de dons volontaires qui ne donnent **aucun** avantage à ceux qui
+les font — voir [`docs/13`](docs/13-lancement-gratuit-et-dons.md).
 
 ```bash
 npm install
@@ -40,16 +44,35 @@ de l'API et affiché à l'écran.
 | Commande | Rôle |
 |---|---|
 | `npm run dev` | Serveur de développement |
-| `npm test` | 134 tests (matching, IA, confidentialité, sécurité, paiement) |
+| `npm test` | 178 tests (matching, IA, confidentialité, sécurité, paiement, dons, admin) |
 | `npm run lint` | ESLint (0 erreur, 0 avertissement) |
 | `npm run typecheck` | Vérification TypeScript |
 | `npm run build` | Build de production |
 | `npm run db:reset` | Réinitialise la base (référentiels seuls) |
 | `npm run db:reset:dev` | Idem + 11 profils de test togolais |
+| `npm run admin:create` | Crée un compte interne et imprime son lien de configuration |
+| `npm run admin:reset` | Efface mot de passe et MFA, réémet un lien |
+| `npm run admin:list` | État des comptes internes |
+| `npm run purge` | Applique les durées de rétention (`--dry-run` pour un inventaire) |
 
-Back-office : `admin@edenia.app` (super administrateur) et
-`verification@edenia.app` (agent de vérification) — connexion par e-mail, code
-`228228`. Les 11 comptes de test togolais sont listés dans
+### Ouvrir le back-office
+
+Il n'existe **aucun compte administrateur par défaut**. On en crée un :
+
+```bash
+npm run admin:create -- --email=vous@exemple.com --name="Votre nom"
+```
+
+La commande ne fabrique pas de mot de passe : elle imprime un lien à usage
+unique. Connectez-vous à EDENIA avec cette adresse (code `228228`), ouvrez le
+lien, choisissez votre mot de passe, scannez le QR code avec une application
+d'authentification, notez vos dix codes de récupération. Ensuite, `/admin`
+demande mot de passe **et** code à 6 chiffres à chaque session.
+
+Lien perdu : `npm run admin:reset -- --email=…`. Procédure complète dans
+[`docs/09`](docs/09-roles-admin-securite.md) §2.2.
+
+Les 11 comptes de test togolais sont listés dans
 [`docs/11`](docs/11-phase-pilote-test-interne.md) §6.
 
 ---
@@ -67,10 +90,12 @@ Back-office : `admin@edenia.app` (super administrateur) et
 | **Site public** | 16 pages rédigées et optimisées SEO |
 
 | **Paiement** | GeniusPay : checkout hébergé, webhook signé HMAC, idempotence, machine d'état — [`docs/12`](docs/12-geniuspay.md) |
+| **Lancement gratuit** | Premium éteint, dons sans contrepartie, back-office complet — [`docs/13`](docs/13-lancement-gratuit-et-dons.md) |
 
-Reste à faire avant une ouverture au public : clés GeniusPay live, passerelle SMS
-réelle, modération automatique des images, budget JS (176 ko contre 120 ko
-visés), durcissement final. Détail dans [`docs/10`](docs/10-roadmap-modules.md).
+Reste à faire avant une ouverture au grand public : clés GeniusPay live,
+passerelle SMS réelle, modération automatique des images, budget JS (172 ko
+contre 120 ko visés), audit externe. Détail dans
+[`docs/10`](docs/10-roadmap-modules.md).
 
 ---
 
@@ -90,9 +115,21 @@ elle est rejetée — même si le modèle l'affirme avec une confiance de 1. « 
 sais pas encore » devient « à discuter », jamais un choix arbitraire.
 
 **Payer n'achète jamais la sécurité.** Signaler, bloquer, voir un badge et
-demander sa propre vérification restent gratuits pour tout le monde. Premium ne
-vend que du confort — filtres, tri, volume. La liste `NEVER_PAYWALLED` rend la
-règle vérifiable par test.
+demander sa propre vérification restent gratuits pour tout le monde. Au
+lancement, tout l'est : Premium existe dans le code mais aucun membre ne le
+voit. Un don ne donne ni badge, ni visibilité, ni meilleur matching, ni quota
+supérieur — la liste `DONATION_GRANTS_NOTHING` rend la règle vérifiable par
+test.
+
+**Le back-office demande trois preuves.** Une session EDENIA ne l'ouvre pas :
+il faut en plus un mot de passe administrateur et un code TOTP. Aucun compte par
+défaut, aucun mot de passe universel, aucun endpoint de contournement — le
+premier administrateur naît d'un lien à usage unique, et choisit lui-même son
+secret.
+
+**Un chiffre qu'on ne mesure pas s'affiche comme non mesuré.** L'entonnoir
+d'activation commence par « Visite du site », que nous n'instrumentons pas :
+il est rendu vide, avec son motif, plutôt que rempli avec le nombre d'inscrits.
 
 **Le trust score ne sort pas du back-office.** Le badge public est factuel
 (« ceci a été contrôlé ») ; le score interne est probabiliste et invisible. Un
@@ -122,14 +159,16 @@ l'optimisation la plus rentable — et personne ne remarque l'absence.
 ## Architecture
 
 ```
-docs/            00 → 12 : analyse, architecture, données, parcours, design,
+docs/            00 → 13 : analyse, architecture, données, parcours, design,
                  PWA, IA, matching, vérification, sécurité, feuille de route,
-                 phase pilote, GeniusPay
+                 phase pilote, GeniusPay, lancement gratuit
 prisma/          Schéma (50 entités, portable SQLite ↔ PostgreSQL) + seed
 src/app/         Pages publiques, application, back-office, API /api/v1/**
 src/components/  Composants d'interface
 src/lib/         Logique métier, sans dépendance à React ni à HTTP
+  admin/         Back-office : mot de passe, TOTP, invitations, statistiques
   ai/            Couche IA : fournisseurs, extraction, garde-fous
+  donations/     Dons volontaires, strictement séparés des abonnements
   matching/      Moteur de compatibilité (pur, testable sans base)
   auth/          OTP, sessions, RBAC, limitation de débit
   trust/         Anti-arnaque, score interne
@@ -138,7 +177,9 @@ src/lib/         Logique métier, sans dépendance à React ni à HTTP
   storage/       Traitement et stockage des photos
   geo/           Référentiel pays/régions/villes + règles de numérotation
   db/            Client Prisma + frontière de sérialisation publique
-tests/           134 tests
+  privacy/       Application des durées de rétention
+  settings/      Réglages modifiables depuis le back-office
+tests/           178 tests
 ```
 
 Pile : Next.js 16 (App Router) · React 19 · TypeScript strict · Tailwind CSS v4 ·

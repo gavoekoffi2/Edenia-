@@ -6,6 +6,7 @@ import { currentTier, remainingLikes } from "@/lib/discovery/likes";
 import { ProfileActions } from "@/components/profile-actions";
 import { ProfileCard } from "@/components/profile-card";
 import { EmptyState } from "@/components/ui";
+import { premiumIsPublic } from "@/lib/config/monetization";
 
 export const metadata = { title: "Découvrir", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -59,7 +60,7 @@ export default async function Page({ searchParams }: Props) {
         </p>
       </div>
 
-      {tier === "FREE" && rail === "verified" && (
+      {premiumIsPublic && tier === "FREE" && rail === "verified" && (
         <div className="e-card p-3 text-sm" style={{ borderColor: "var(--color-gold-400)" }}>
           Aperçu limité à 3 profils vérifiés par jour. Le badge reste visible partout, gratuitement —
           Premium ne débloque que le filtre.{" "}

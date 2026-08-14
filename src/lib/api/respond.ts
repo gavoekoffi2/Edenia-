@@ -4,6 +4,7 @@ import { findPrivateLeaks } from "@/lib/db/serialize";
 import { isDev } from "@/lib/config/env";
 import { ForbiddenError } from "@/lib/auth/rbac";
 import { UnauthorizedError } from "@/lib/auth/current-user";
+import { AdminElevationRequired } from "@/lib/admin/service";
 
 /**
  * Reponses HTTP normalisees.
@@ -68,6 +69,14 @@ export function handler<C = unknown>(fn: (request: Request, context: C) => Promi
       if (error instanceof BadRequestError) return fail(error.message, 400);
       if (error instanceof UnauthorizedError) return fail("Authentification requise.", 401);
       if (error instanceof ForbiddenError) return fail("Accès refusé.", 403);
+      // Session d'administration absente ou expiree : 401 avec un indice sur
+      // la marche a suivre, pour que l'interface propose de se reconnecter au
+      // lieu d'afficher une erreur muette.
+      if (error instanceof AdminElevationRequired) {
+        return fail("Session d'administration expirée. Reconnectez-vous au back-office.", 401, {
+          adminElevationRequired: true,
+        });
+      }
       console.error("Erreur API non gérée", error);
       return fail("Une erreur est survenue. Réessayez.", 500);
     }

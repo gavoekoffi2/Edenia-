@@ -34,7 +34,7 @@ export function OnboardingChat() {
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [voice, setVoice] = useState<VoiceState>({ supported: false, recording: false });
+  const [voice, setVoice] = useState<VoiceState>({ supported: false, recording: false, error: null });
 
   const started = useRef(false);
   const endRef = useRef<HTMLDivElement>(null);
@@ -105,8 +105,18 @@ export function OnboardingChat() {
 
   function startVoice() {
     const recognition = createRecognition();
-    if (!recognition) return;
-    setVoice((state) => ({ ...state, recording: true }));
+    if (!recognition) {
+      // C8 : le vocal n'est pas universel. On le dit, et la saisie clavier
+      // reste immediatement utilisable — jamais d'ecran bloque sur un micro
+      // qui n'existe pas.
+      setVoice({
+        supported: false,
+        recording: false,
+        error: "Le mode vocal n'est pas encore disponible sur cet appareil. Vous pouvez répondre par écrit.",
+      });
+      return;
+    }
+    setVoice((state) => ({ ...state, recording: true, error: null }));
 
     recognition.onresult = (event: SpeechRecognitionEventLike) => {
       const transcript = Array.from({ length: event.results.length })
@@ -117,9 +127,24 @@ export function OnboardingChat() {
       // dans la conversation — l'utilisateur peut la corriger avant d'envoyer.
       setInput(transcript);
     };
-    recognition.onerror = () => setVoice((state) => ({ ...state, recording: false }));
+    recognition.onerror = () =>
+      setVoice((state) => ({
+        ...state,
+        recording: false,
+        error:
+          "La reconnaissance vocale n'a pas fonctionné (micro refusé, réseau, ou langue non prise en charge). Répondez par écrit.",
+      }));
     recognition.onend = () => setVoice((state) => ({ ...state, recording: false }));
-    recognition.start();
+
+    try {
+      recognition.start();
+    } catch {
+      setVoice({
+        supported: false,
+        recording: false,
+        error: "Le mode vocal n'a pas pu démarrer sur cet appareil. Vous pouvez répondre par écrit.",
+      });
+    }
   }
 
   return (
@@ -249,8 +274,14 @@ export function OnboardingChat() {
           <p className="text-xs mt-2" style={{ color: "var(--fg-muted)" }}>
             {voice.supported
               ? "Écrivez ou appuyez sur le micro — vous pourrez corriger la transcription avant d'envoyer."
-              : "Répondez en quelques mots, cela suffit."}
+              : "Le mode vocal n'est pas encore disponible sur cet appareil. Vous pouvez répondre par écrit."}
           </p>
+
+          {voice.error && (
+            <p className="text-xs mt-1" role="status" style={{ color: "var(--color-danger-500)" }}>
+              {voice.error}
+            </p>
+          )}
         </>
       )}
     </div>
@@ -264,6 +295,8 @@ export function OnboardingChat() {
 interface VoiceState {
   supported: boolean;
   recording: boolean;
+  /** Message de repli affiche quand le vocal echoue ou n'existe pas. */
+  error: string | null;
 }
 
 interface SpeechRecognitionEventLike {

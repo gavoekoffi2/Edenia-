@@ -119,7 +119,29 @@ La suppression est en deux temps volontairement : effet immédiat visible
 (profil retiré, sessions révoquées), effacement différé — une suppression
 accidentelle doit pouvoir être rattrapée.
 
+Ces durées ne sont plus une intention : `npm run purge`
+(`src/lib/privacy/purge.ts`) les applique, y compris la suppression des fichiers
+photo. À programmer une fois par jour. Détail dans
+[`docs/09`](09-roles-admin-securite.md) §7.
+
 ## 6. Bascule vers PostgreSQL
+
+**Vérifié, pas supposé.** Avec `provider = "postgresql"`, `prisma migrate diff`
+génère 58 tables et 95 index sans une seule erreur. Aucun enum Prisma, aucun
+tableau natif, aucun type `@db.` spécifique, aucun `mode: "insensitive"` dans le
+code : l'interdiction posée en tête de ce document tient.
+
+**Décision pour la bêta fermée : rester sur SQLite.** Pour 50 à 100 personnes il
+tient largement, et migrer introduirait un composant de plus à opérer au moment
+précis où l'attention doit aller aux utilisateurs. La bascule est prête, elle
+attend le volume qui la justifie.
+
+Une différence de comportement à connaître le jour venu : `contains` est
+insensible à la casse sur SQLite pour l'ASCII, sensible sur PostgreSQL. Cela
+n'affecte que la recherche du back-office (`/admin/utilisateurs`) ; ajouter
+`mode: "insensitive"` y suffira.
+
+### Procédure
 
 1. `provider = "postgresql"` dans `prisma/schema.prisma`.
 2. `DATABASE_URL=postgresql://…`.

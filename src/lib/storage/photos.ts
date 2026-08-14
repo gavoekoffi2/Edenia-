@@ -165,14 +165,49 @@ export async function deletePhoto(storageKey: string): Promise<void> {
  * demande un service de vision qui n'est pas branche — les photos partent donc
  * en revue humaine en production plutot que d'etre approuvees a l'aveugle.
  */
+export const PHOTO_MODERATION_STATUSES = ["PENDING", "APPROVED", "REJECTED", "REVIEW_REQUIRED"] as const;
+export type PhotoModerationStatus = (typeof PHOTO_MODERATION_STATUSES)[number];
+
+export const PHOTO_MODERATION_LABEL: Record<PhotoModerationStatus, string> = {
+  PENDING: "En attente d'examen",
+  APPROVED: "Approuvée",
+  REJECTED: "Refusée",
+  REVIEW_REQUIRED: "Doute — examen humain requis",
+};
+
 export interface AutoModerationVerdict {
-  status: "APPROVED" | "PENDING" | "REJECTED";
+  status: PhotoModerationStatus;
   reason: string;
 }
 
+/**
+ * Trois issues, et la distinction entre les deux dernieres compte :
+ *
+ *  - REJECTED        : un critere objectif n'est pas rempli. Aucun humain n'a
+ *                      besoin de regarder une image de 80 pixels de cote.
+ *  - REVIEW_REQUIRED : un signal fait douter. La photo passe devant un humain
+ *                      **en priorite** — c'est une file distincte, pas la queue
+ *                      normale.
+ *  - PENDING         : rien de suspect, mais rien de verifie non plus. File
+ *                      d'attente ordinaire.
+ *
+ * Fusionner REVIEW_REQUIRED et PENDING reviendrait a noyer les cas douteux
+ * dans le volume, c'est-a-dire a les traiter en dernier.
+ */
 export function autoModerate(photo: StoredPhoto, options: { devMode: boolean }): AutoModerationVerdict {
   if (photo.width < 200 || photo.height < 200) {
-    return { status: "REJECTED", reason: "Image trop petite." };
+    return { status: "REJECTED", reason: "Image trop petite (moins de 200 px de côté)." };
+  }
+
+  const ratio = photo.width / photo.height;
+  if (ratio > 3 || ratio < 1 / 3) {
+    // Un format extreme cache souvent une capture d'ecran ou un montage.
+    return { status: "REVIEW_REQUIRED", reason: "Format inhabituel : capture d'écran ou montage possible." };
+  }
+
+  if (photo.bytes < 4_000) {
+    // Apres reencodage en WebP, une photo de personne ne descend pas si bas.
+    return { status: "REVIEW_REQUIRED", reason: "Image très peu détaillée après réencodage." };
   }
 
   if (options.devMode) {

@@ -1,4 +1,4 @@
-import { requirePermission } from "@/lib/auth/current-user";
+import { requireAdminPage } from "@/lib/admin/guard";
 import { DEV_OTP_CODE, isDevAuth, serviceStatuses } from "@/lib/config/mode";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * et s'il reste à brancher avant la bêta.
  */
 export default async function Page() {
-  await requirePermission("analytics.read");
+  await requireAdminPage("analytics.read");
   const services = serviceStatuses();
   const pending = services.filter((service) => service.pendingRealIntegration);
 

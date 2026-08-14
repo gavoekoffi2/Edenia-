@@ -34,10 +34,14 @@ export const PERMISSIONS = [
   "payments.read",
   "payments.refund",
   "plans.manage",
+  "donations.read",
   // Pilotage
   "analytics.read",
   "audit.read",
   "admins.manage",
+  "settings.read",
+  "settings.write",
+  "countries.manage",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -46,18 +50,32 @@ export const ROLES = [
   "USER",
   "SUPPORT",
   "ANALYST",
-  "VERIFICATION_AGENT",
+  "VERIFIER",
   "MODERATOR",
   "ADMIN",
   "SUPER_ADMIN",
 ] as const;
 export type Role = (typeof ROLES)[number];
 
+/**
+ * `VERIFICATION_AGENT` etait le code utilise avant le sprint final. Il reste
+ * accepte en lecture pour ne pas invalider les comptes deja crees : renommer un
+ * role ne doit pas verrouiller la personne qui le porte.
+ */
+const ROLE_ALIASES: Record<string, Role> = {
+  VERIFICATION_AGENT: "VERIFIER",
+};
+
+export function normalizeRole(role: string): Role | null {
+  const canonical = ROLE_ALIASES[role] ?? role;
+  return (ROLES as readonly string[]).includes(canonical) ? (canonical as Role) : null;
+}
+
 export const ROLE_LABEL: Record<Role, string> = {
   USER: "Membre",
   SUPPORT: "Support",
   ANALYST: "Analyste",
-  VERIFICATION_AGENT: "Agent de vérification",
+  VERIFIER: "Agent de vérification",
   MODERATOR: "Modérateur",
   ADMIN: "Administrateur",
   SUPER_ADMIN: "Administrateur principal",
@@ -66,12 +84,12 @@ export const ROLE_LABEL: Record<Role, string> = {
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   USER: [],
 
-  SUPPORT: ["users.read", "reports.read", "verification.read"],
+  SUPPORT: ["users.read", "reports.read", "verification.read", "analytics.read"],
 
   ANALYST: ["analytics.read"],
 
   // §36 : perimetre etroit et assume.
-  VERIFICATION_AGENT: [
+  VERIFIER: [
     "users.read",
     "verification.read",
     "verification.decide",
@@ -106,15 +124,19 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "content.write",
     "events.manage",
     "payments.read",
+    "donations.read",
     "analytics.read",
     "audit.read",
+    "settings.read",
+    "countries.manage",
   ],
 
   SUPER_ADMIN: [...PERMISSIONS],
 };
 
 export function permissionsFor(role: string): readonly Permission[] {
-  return ROLE_PERMISSIONS[role as Role] ?? [];
+  const canonical = normalizeRole(role);
+  return canonical ? ROLE_PERMISSIONS[canonical] : [];
 }
 
 export function can(role: string, permission: Permission): boolean {
@@ -126,7 +148,8 @@ export function canAll(role: string, permissions: Permission[]): boolean {
 }
 
 export function isStaff(role: string): boolean {
-  return role !== "USER" && (ROLES as readonly string[]).includes(role);
+  const canonical = normalizeRole(role);
+  return canonical !== null && canonical !== "USER";
 }
 
 /** §50 : MFA obligatoire pour tout role interne. */

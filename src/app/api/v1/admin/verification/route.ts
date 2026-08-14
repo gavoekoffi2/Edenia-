@@ -1,11 +1,9 @@
 import { z } from "zod";
 import { VERIFICATION_KIND } from "@/lib/config/enums";
-import { requirePermission } from "@/lib/auth/current-user";
+import { recordAdminAction, requireAdmin } from "@/lib/admin/service";
 import { prisma } from "@/lib/db/client";
 import { validateDecision } from "@/lib/verification/levels";
 import { TEMPLATES } from "@/lib/notifications";
-import { audit } from "@/lib/auth/service";
-import { pseudonymize } from "@/lib/crypto/field";
 import { fail, handler, ok, parseBody } from "@/lib/api/respond";
 
 const schema = z.object({
@@ -17,7 +15,7 @@ const schema = z.object({
 });
 
 export const POST = handler(async (request) => {
-  const admin = await requirePermission("verification.decide");
+  const admin = await requireAdmin("verification.decide");
   const body = await parseBody(request, schema);
 
   // §27 : la règle métier est appliquée côté serveur, pas seulement dans l'UI.
@@ -33,14 +31,13 @@ export const POST = handler(async (request) => {
   if (!record) return fail("Dossier introuvable.", 404);
 
   const status = body.approve ? "APPROVED" : "REJECTED";
-  const adminUser = await prisma.adminUser.findUnique({ where: { userId: admin.id } });
 
   await prisma.verificationRequest.update({
     where: { id: body.requestId },
     data: {
       status,
       decidedAt: new Date(),
-      agentId: adminUser?.id ?? null,
+      agentId: admin.adminId,
       notesInternal: body.reason || null,
       messageToUser: body.approve ? null : body.reason,
     },
@@ -49,7 +46,7 @@ export const POST = handler(async (request) => {
   await prisma.verificationEvent.create({
     data: {
       requestId: body.requestId,
-      actorId: adminUser?.id ?? null,
+      actorId: admin.adminId,
       action: body.approve ? "APPROVED" : "REJECTED",
       detail: body.reason || null,
     },
@@ -79,7 +76,7 @@ export const POST = handler(async (request) => {
         status,
         checkedItems: JSON.stringify(decision.checkedItems),
         verifiedAt: body.approve ? new Date() : null,
-        agentId: adminUser?.id ?? null,
+        agentId: admin.adminId,
       },
     });
   }
@@ -112,21 +109,11 @@ export const POST = handler(async (request) => {
     },
   });
 
-  await prisma.adminAction.create({
-    data: {
-      adminId: adminUser?.id ?? "unknown",
-      action: `VERIFICATION_${status}`,
-      targetType: "User",
-      targetId: record.userId,
-      reason: body.reason || null,
-    },
-  }).catch(() => undefined);
-
-  await audit({
-    event: `VERIFICATION_${status}`,
-    actorType: "ADMIN",
-    actorRef: pseudonymize(admin.id),
-    targetRef: pseudonymize(record.userId),
+  await recordAdminAction(admin, {
+    action: `VERIFICATION_${status}`,
+    targetType: "User",
+    targetId: record.userId,
+    reason: body.reason || undefined,
     metadata: { kind: body.kind },
   });
 

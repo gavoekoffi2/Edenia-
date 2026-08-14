@@ -34,6 +34,22 @@ const schema = z.object({
   PAYMENT_PROVIDER: z.enum(["simulated", "geniuspay"]).default("simulated"),
   PAYMENT_WEBHOOK_SECRET: z.string().optional(),
 
+  /**
+   * Modele economique actif.
+   * - free      : lancement gratuit. Premium invisible pour les utilisateurs,
+   *               le code reste en place. Les dons sont ouverts.
+   * - donations : identique a « free » ; alias explicite.
+   * - premium   : abonnements payants actifs.
+   * Le defaut est « free » : un oubli de configuration ne peut pas facturer
+   * quelqu'un par accident.
+   */
+  MONETIZATION_MODE: z.enum(["free", "donations", "premium"]).default("free"),
+  /** Permet de couper les dons sans redeploiement de code. */
+  DONATIONS_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
+
   // --- GeniusPay (§5-§7 de la phase d'integration) -------------------------
   // Les cles ne vivent QUE ici, cote serveur. Aucune n'est prefixee
   // NEXT_PUBLIC_, donc aucune ne peut traverser vers le navigateur.

@@ -18,11 +18,16 @@ précédents. Voici l'état réel.
 | **M8 — Social** | Likes, matchs, chat, questions de fond, blocage, signalement | Parcours réel |
 | **M9 — Confiance** | 5 niveaux, demande gratuite, consentement église explicite | Parcours réel |
 | **M10 — Premium** | Entitlements, offres calées sur le pouvoir d'achat, couche de paiement | Parcours réel |
-| **M11 — Back-office** | Tableau de bord (KPI §53 en tête), vérification, modération | Parcours réel |
+| **M11 — Back-office** | 12 pages, RBAC réel, MFA TOTP, invitations, statistiques et entonnoir | Parcours réel |
 | **M12 — PWA** | Manifeste, service worker, page hors ligne, budget perf | Build |
-| **M13 — Site public** | 16 pages rédigées, SEO, sitemap, robots | Build |
+| **M13 — Site public** | 17 pages rédigées, SEO, sitemap, robots | Build |
+| **M14 — Photos** | Téléversement, WebP, EXIF/GPS retirés, blurhash, 4 statuts de modération | Parcours réel |
+| **M15 — GeniusPay** | Checkout hébergé, webhook signé HMAC, idempotence, machine d'état | 23 tests + parcours |
+| **M16 — Lancement gratuit** | Premium éteint, dons sans contrepartie, réglages d'exploitation | 17 tests + parcours |
+| **M17 — Sécurité admin** | scrypt, TOTP RFC 6238, codes de secours, élévation, verrouillage | 26 tests + parcours |
+| **M18 — Confidentialité** | CSP à nonce, tâche de purge des durées de rétention | Parcours réel |
 
-**87 tests, build de production vert, parcours complet vérifié de bout en bout.**
+**178 tests, build de production vert, parcours complet vérifié de bout en bout.**
 
 ## 2. Modélisé mais désactivé (feature flags)
 
@@ -34,41 +39,60 @@ Les entités existent en base pour éviter une migration douloureuse ; seules le
 surfaces sont éteintes. Les pages correspondantes annoncent honnêtement leur
 disponibilité future plutôt que d'afficher un contenu inventé.
 
-## 3. Ce qui reste à faire avant une ouverture au public
+## 3. Ce qui reste à faire
 
-Par ordre de criticité :
+Par ordre de criticité. La distinction compte : la bêta fermée (50 à 100
+personnes au Togo, encadrées) et l'ouverture au grand public n'ont pas les mêmes
+exigences.
 
-### P0 — Bloquants
+### P0 — Bloquants pour une **ouverture au public**, pas pour la bêta fermée
 
-1. **Téléversement et modération des photos.** Le modèle `Photo` existe, la
-   frontière de sérialisation filtre déjà les photos non approuvées, mais le
-   flux de téléversement, le redimensionnement AVIF/WebP, le calcul du blurhash
-   et le contrôle automatique ne sont pas écrits. Sans photos, la découverte
-   n'a pas de sens.
-2. **Agrégateur Mobile Money réel.** L'interface `PaymentProvider` et le
-   catalogue par pays sont prêts ; l'adaptateur est simulé. Il faut un contrat
-   avec un agrégateur, puis implémenter `initiate`, `checkStatus`,
-   `verifyWebhook` et la route de webhook.
-3. **Passerelle SMS réelle.** `ConsoleSmsProvider` écrit dans la console.
-   Sans SMS, personne ne peut s'inscrire par téléphone — le canal principal.
-4. **Sécurité** : nonces CSP, flux TOTP administrateur, tâche de purge des
-   données. Voir `docs/09` §6.
+1. **Passerelle SMS réelle.** `ConsoleSmsProvider` écrit dans la console. En
+   bêta fermée le code est `228228`, affiché à l'écran et annoncé comme tel aux
+   testeurs. Au public, personne ne pourrait s'inscrire par téléphone — le canal
+   principal.
+2. **Clés GeniusPay live.** L'intégration est complète et exercée de bout en
+   bout (checkout, webhook signé, idempotence, machine d'état) mais en mode
+   simulé. Un don réel exige les clés `pk_live_`/`sk_live_` et le secret de
+   webhook. Le démarrage en production est bloqué si ces clés manquent.
+3. **Modération automatique des images.** Le contrôle actuel ne juge que des
+   critères objectifs — dimensions, format, densité — et met les cas douteux en
+   `REVIEW_REQUIRED`. Ni nudité, ni violence, ni présence d'un visage : cela
+   demande un service de vision. Tenable avec une file humaine sur 100
+   personnes, intenable sur 10 000.
+4. **Audit externe.** Indispensable avant d'exposer un flux de pièces
+   d'identité au grand public.
+
+### Résolus pendant le sprint final
+
+- ~~Téléversement et modération des photos~~ → M14, quatre statuts, EXIF retiré.
+- ~~Agrégateur Mobile Money~~ → M15, GeniusPay intégré (`docs/12`).
+- ~~Nonces CSP~~ → `src/middleware.ts`, plus aucun `'unsafe-inline'` sur les
+  scripts (`docs/09` §5.1).
+- ~~Flux TOTP administrateur~~ → M17 (`docs/09` §2.1).
+- ~~Tâche de purge~~ → `npm run purge` (`docs/09` §7).
 
 ### P1 — Avant la montée en charge
 
-0. **Budget JS non tenu.** 176 ko gzip sur le parcours principal contre 120 ko
-   visés (`docs/05` §3), soit ~3,7 s de premier chargement en 3G lente. Le
-   surcoût vient du socle React/Next, pas de notre code. Piste : rendu statique
-   sans hydratation sur les pages publiques.
-
-5. Fournisseur STT en production (l'interface est prête, le mode vocal repose
-   aujourd'hui sur la Web Speech API du navigateur).
-6. Bascule PostgreSQL + index de recherche (`docs/02` §6).
+0. **Budget JS non tenu.** 172 ko gzip sur le parcours principal contre 120 ko
+   visés (`docs/05` §3), soit ~3,6 s de premier chargement en 3G lente. Le
+   surcoût vient du socle React/Next, pas de notre code. Refondre l'application
+   pour gagner ces 52 ko juste avant une bêta serait un mauvais échange : on
+   remplacerait un problème mesuré par un risque de régression non mesuré. À
+   traiter quand le produit sera stable, par du rendu sans hydratation sur les
+   pages publiques.
+5. Fournisseur STT en production. Le mode vocal repose aujourd'hui sur la Web
+   Speech API du navigateur : il n'est donc **pas universel**, et l'interface le
+   dit désormais explicitement au lieu de masquer le bouton en silence.
+6. Bascule PostgreSQL. Auditée et sans obstacle (`docs/02` §6) ; volontairement
+   reportée après la bêta.
 7. Envoi différé des messages (Background Sync) pour les connexions instables.
 8. Tests d'intégration automatisés sur le parcours complet — il est aujourd'hui
    vérifié manuellement (script reproductible), pas en intégration continue.
-9. Instrumentation analytique du §53 (entonnoir inscription → profil → like →
-   match → message → réponse).
+9. Mesure d'audience anonyme. Sans elle, la première marche de l'entonnoir
+   (« Visite ») reste affichée comme **non mesurée** — jamais remplie par une
+   estimation.
+10. Limitation de débit dans un store partagé plutôt qu'en base.
 
 ### P2 — V2 / V3 (§57, §58)
 

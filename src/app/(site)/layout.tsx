@@ -25,6 +25,7 @@ const FOOTER_LINKS: Array<{ heading: string; links: Array<{ href: string; label:
     links: [
       { href: "/a-propos", label: "À propos" },
       { href: "/tarifs", label: "Tarifs" },
+      { href: "/soutenir", label: "Soutenir EDENIA" },
       { href: "/securite", label: "Sécurité" },
       { href: "/faq", label: "FAQ" },
       { href: "/contact", label: "Contact" },
@@ -38,6 +39,8 @@ const FOOTER_LINKS: Array<{ heading: string; links: Array<{ href: string; label:
     ],
   },
 ];
+
+
 
 export default function SiteLayout({ children }: { children: React.ReactNode }) {
   return (

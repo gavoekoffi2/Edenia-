@@ -74,6 +74,7 @@ model User {
 
   subscriptions Subscription[]
   payments      Payment[]
+  donations     Donation[]
   notifications Notification[]
   pushSubscriptions PushSubscription[]
 
@@ -215,11 +216,19 @@ model Photo {
   blurhash   String? // §45 placeholder ultra-leger pour le chargement progressif
   position   Int      @default(0)
   isPrimary  Boolean  @default(false)
-  moderationStatus String @default("PENDING") // PENDING | APPROVED | REJECTED
+  /**
+   * PENDING | APPROVED | REJECTED | REVIEW_REQUIRED
+   * REVIEW_REQUIRED : le controle automatique a un doute et demande un oeil
+   * humain. Distinct de PENDING, qui signifie « pas encore examine du tout ».
+   */
+  moderationStatus String @default("PENDING")
   moderationReason String?
+  moderatedAt      DateTime?
+  moderatedBy      String?
   createdAt  DateTime @default(now())
 
   @@index([userId, position])
+  @@index([moderationStatus, createdAt])
 }
 
 // §32/§49 : modelise des le MVP, desactive par feature flag.
@@ -395,6 +404,8 @@ model Country {
   dialCode    String // +228
   currency    String // XOF
   isLaunched  Boolean @default(false) // §4 : deploiement par vagues
+  /** §20 : ACTIVE | TEST | COMING_SOON | PAUSED */
+  status      String  @default("COMING_SOON")
   isAfrican   Boolean @default(true)
   isFrancophone Boolean @default(true)
   launchOrder Int?
@@ -1009,19 +1020,115 @@ model AdminUser {
   userId    String   @unique
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   displayName String
+  firstName String?
+  lastName  String?
   roleCode  String
   role      AdminRole @relation(fields: [roleCode], references: [code])
-  mfaSecretEnc String? // §50 : MFA obligatoire pour tout role interne
-  mfaEnabledAt DateTime?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
 
-  actions  AdminAction[]
-  requests VerificationRequest[]
+  /** scrypt : sel + empreinte. Jamais le mot de passe. */
+  passwordHash String?
+  passwordSetAt DateTime?
+  /** Secret TOTP chiffre au repos (AES-256-GCM). */
+  mfaSecretEnc String?
+  mfaEnabledAt DateTime?
+  /** Codes de recuperation haches, JSON string[]. Consommes a l'usage. */
+  mfaRecoveryHashes String @default("[]")
+
+  isActive  Boolean  @default(true)
+  lastLoginAt DateTime?
+  failedLogins Int    @default(0)
+  lockedUntil DateTime?
+  createdAt DateTime @default(now())
+  createdById String?
+
+  actions     AdminAction[]
+  requests    VerificationRequest[]
+  invitations AdminInvitation[]
+}
+
+/**
+ * §9, §36 — invitation d'un administrateur.
+ * Le Super Admin ne voit jamais le mot de passe : il envoie un lien a usage
+ * unique, et l'interesse definit lui-meme son secret.
+ */
+model AdminInvitation {
+  id          String   @id @default(cuid())
+  adminUserId String
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  /** Jeton hache : la valeur en clair n'existe qu'une fois, dans le lien. */
+  tokenHash   String   @unique
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+/**
+ * §22 — parametres modifiables sans toucher au code.
+ * Les valeurs critiques (mode de monetisation, pays actifs) vivent ici plutot
+ * que dans des variables d'environnement, pour eviter un redeploiement.
+ */
+model Setting {
+  key       String   @id
+  value     String
+  category  String   @default("GENERAL")
+  label     String
+  /** Un parametre protege exige le role SUPER_ADMIN. */
+  isProtected Boolean @default(false)
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+/**
+ * §4, §5 — soutien volontaire. Strictement separe de Subscription et de
+ * Payment : un don n'ouvre aucun droit, aucun badge, aucune visibilite.
+ */
+model Donation {
+  id          String   @id @default(cuid())
+  /** Facultatif : on peut soutenir sans compte. */
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  donorName   String?
+  donorEmail  String?
+  amountCents Int
+  currency    String   @default("XOF")
+  message     String?
+  isAnonymous Boolean  @default(false)
+  status      String   @default("PENDING")
+  gateway     String   @default("SIMULATED")
+  providerRef String?
+  orderRef    String   @unique
+  environment String   @default("sandbox")
+  checkoutUrl String?
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+
+  transactions DonationTransaction[]
+
+  @@index([status, createdAt])
+  @@index([userId])
+}
+
+model DonationTransaction {
+  id         String   @id @default(cuid())
+  donationId String
+  donation   Donation @relation(fields: [donationId], references: [id], onDelete: Cascade)
+  source     String
+  event      String?
+  fromStatus String?
+  toStatus   String
+  deliveryId String?
+  rawPayload String?
+  createdAt  DateTime @default(now())
+
+  @@index([donationId, createdAt])
+  @@unique([donationId, deliveryId])
 }
 
 model AdminRole {
-  code        String @id // SUPER_ADMIN | ADMIN | MODERATOR | VERIFICATION_AGENT | SUPPORT | ANALYST
+  code        String @id // SUPER_ADMIN | ADMIN | MODERATOR | VERIFIER | SUPPORT | ANALYST
   nameFr      String
   permissionsJson String @default("[]") // liste de permissions explicites (deny by default)
 

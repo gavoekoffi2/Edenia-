@@ -1,4 +1,5 @@
 import { productRules } from "@/lib/config/features";
+import { isFreeLaunch } from "@/lib/config/monetization";
 
 /**
  * §31, §43 et C2 — ce que Premium debloque, et surtout ce qu'il ne debloque pas.
@@ -69,19 +70,36 @@ const PREMIUM_ONLY: readonly Capability[] = [
 
 export type Tier = "FREE" | "PREMIUM";
 
-export function hasCapability(tier: Tier, capability: Capability): boolean {
+/**
+ * Le parametre `freeLaunch` a une valeur par defaut, jamais passee en
+ * production : il existe pour que les tests puissent verifier les **deux**
+ * regimes. Sans lui, la grille Premium deviendrait invisible aux tests des
+ * qu'on passe en lancement gratuit, et personne ne s'apercevrait qu'elle a
+ * ete cassee le jour ou on la rallume.
+ */
+export function hasCapability(
+  tier: Tier,
+  capability: Capability,
+  freeLaunch: boolean = isFreeLaunch,
+): boolean {
   if (NEVER_PAYWALLED.includes(capability)) return true;
+  // §1 du sprint final : en lancement gratuit, il n'existe pas de capacite
+  // reservee — pas parce qu'on l'a retiree du code, mais parce qu'il n'y a
+  // personne a qui la refuser. Ce point unique evite qu'un ecran oublie
+  // la regle et affiche un cadenas fantome.
+  if (freeLaunch) return true;
   if (PREMIUM_ONLY.includes(capability)) return tier === "PREMIUM";
   return true;
 }
 
-export function dailyLikeLimit(tier: Tier): number {
+export function dailyLikeLimit(tier: Tier, freeLaunch: boolean = isFreeLaunch): number {
+  if (freeLaunch) return productRules.dailyLikeLimitPremium;
   return tier === "PREMIUM" ? productRules.dailyLikeLimitPremium : productRules.dailyLikeLimitFree;
 }
 
 /** §23 : le rail « Profils vérifiés » reste consultable en gratuit, en volume limite. */
-export function railLimit(tier: Tier, rail: string): number {
-  if (tier === "PREMIUM") return 30;
+export function railLimit(tier: Tier, rail: string, freeLaunch: boolean = isFreeLaunch): number {
+  if (freeLaunch || tier === "PREMIUM") return 30;
   return rail === "verified" ? 3 : 10;
 }
 

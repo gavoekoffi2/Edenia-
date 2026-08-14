@@ -25,21 +25,14 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "geolocation=(self), microphone=(self), camera=(self), payment=()" },
-          {
-            key: "Content-Security-Policy",
-            value: [
-              "default-src 'self'",
-              "img-src 'self' data: blob:",
-              "media-src 'self' blob:",
-              "script-src 'self' 'unsafe-inline'",
-              "style-src 'self' 'unsafe-inline'",
-              "connect-src 'self'",
-              "font-src 'self' data:",
-              "frame-ancestors 'none'",
-              "base-uri 'self'",
-              "form-action 'self'",
-            ].join("; "),
-          },
+          /*
+           * La Content-Security-Policy n'est plus ici : elle est posee par
+           * `src/middleware.ts`, qui genere un nonce par reponse. Une valeur
+           * statique ne pourrait pas en contenir, et devrait donc conserver
+           * `'unsafe-inline'`. Les seules reponses qui traversent ce bloc sans
+           * passer par le middleware sont des ressources statiques, pour
+           * lesquelles la CSP n'a pas d'effet.
+           */
         ],
       },
       {

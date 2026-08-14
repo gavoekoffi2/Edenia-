@@ -16,7 +16,7 @@ const ROLE_LABELS_FR: Record<string, string> = {
   USER: "Membre",
   SUPPORT: "Support",
   ANALYST: "Analyste",
-  VERIFICATION_AGENT: "Agent de vérification",
+  VERIFIER: "Agent de vérification",
   MODERATOR: "Modérateur",
   ADMIN: "Administrateur",
   SUPER_ADMIN: "Administrateur principal",
@@ -477,13 +477,13 @@ async function seedAdmin() {
 
   const agent = await prisma.user.upsert({
     where: { email: "verification@edenia.app" },
-    create: { email: "verification@edenia.app", emailVerified: true, role: "VERIFICATION_AGENT", status: "ACTIVE" },
-    update: { role: "VERIFICATION_AGENT" },
+    create: { email: "verification@edenia.app", emailVerified: true, role: "VERIFIER", status: "ACTIVE" },
+    update: { role: "VERIFIER" },
   });
 
   await prisma.adminUser.upsert({
     where: { userId: agent.id },
-    create: { userId: agent.id, displayName: "Agent de vérification", roleCode: "VERIFICATION_AGENT" },
+    create: { userId: agent.id, displayName: "Agent de vérification", roleCode: "VERIFIER" },
     update: {},
   });
 }

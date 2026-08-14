@@ -1,14 +1,23 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { NEVER_PAYWALLED, PLAN_OFFERS, formatXof } from "@/lib/premium/entitlements";
+import { donationsEnabled, premiumIsPublic } from "@/lib/config/monetization";
 
-export const metadata: Metadata = {
-  title: "Tarifs",
-  description:
-    "EDENIA est gratuit pour l'essentiel : profil, matching, likes, matchs, chat et vérification. " +
-    "Premium à partir de 1 250 FCFA par mois débloque les filtres avancés et la compatibilité détaillée.",
-  alternates: { canonical: "/tarifs" },
-};
+export const metadata: Metadata = premiumIsPublic
+  ? {
+      title: "Tarifs",
+      description:
+        "EDENIA est gratuit pour l'essentiel : profil, matching, likes, matchs, chat et vérification. " +
+        "Premium à partir de 1 250 FCFA par mois débloque les filtres avancés et la compatibilité détaillée.",
+      alternates: { canonical: "/tarifs" },
+    }
+  : {
+      title: "Tarifs",
+      description:
+        "EDENIA est entièrement gratuite : profil, matching, likes, matchs, chat et vérification. " +
+        "Aucun abonnement, aucune fonctionnalité réservée. La plateforme vit de dons volontaires.",
+      alternates: { canonical: "/tarifs" },
+    };
 
 const PREMIUM_FEATURES = [
   "Filtre « uniquement les profils vérifiés »",
@@ -36,6 +45,8 @@ const FREE_LABELS: Record<string, string> = {
 };
 
 export default function Page() {
+  if (!premiumIsPublic) return <FreeLaunchPricing />;
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-12">
       <h1 className="e-display text-3xl sm:text-4xl">Tarifs</h1>
@@ -128,6 +139,71 @@ export default function Page() {
         <p className="mt-2 text-sm" style={{ color: "var(--fg-muted)" }}>
           Mobile Money selon votre pays — T-Money, Flooz, MTN Mobile Money, Moov Money, Orange Money, Wave —
           et carte bancaire. Aucun abonnement n'est reconduit sans votre accord explicite.
+        </p>
+      </section>
+    </div>
+  );
+}
+
+/**
+ * §1 à §5 du sprint final — la page tarifs pendant le lancement gratuit.
+ *
+ * Elle ne dit pas « Premium arrive bientôt » : promettre une version payante à
+ * venir suffit à faire hésiter quelqu'un à s'inscrire aujourd'hui. Elle dit ce
+ * qui est vrai maintenant, et ce qui ne changera pas.
+ */
+function FreeLaunchPricing() {
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-12">
+      <h1 className="e-display text-3xl sm:text-4xl">EDENIA est gratuite</h1>
+      <p className="mt-4 text-lg" style={{ color: "var(--fg-muted)" }}>
+        Pas d'abonnement. Pas de fonctionnalité réservée. Pas de badge à acheter. Tout ce que fait la
+        plateforme est accessible à tous les membres, sans exception.
+      </p>
+
+      <div className="e-card p-6 mt-8">
+        <p className="e-display text-4xl">0 FCFA</p>
+        <p className="text-sm mt-1" style={{ color: "var(--fg-muted)" }}>
+          Accès complet
+        </p>
+        <ul className="mt-5 space-y-2 text-sm">
+          {NEVER_PAYWALLED.map((capability) => (
+            <li key={capability} className="flex gap-2">
+              <span aria-hidden="true" style={{ color: "var(--color-success-600)" }}>✓</span>
+              <span>{FREE_LABELS[capability] ?? capability}</span>
+            </li>
+          ))}
+          <li className="flex gap-2">
+            <span aria-hidden="true" style={{ color: "var(--color-success-600)" }}>✓</span>
+            <span>Filtres avancés, compatibilité détaillée et tous les modes de découverte</span>
+          </li>
+        </ul>
+        <Link href="/inscription" className="e-btn e-btn-primary mt-6 w-full">
+          Créer mon compte
+        </Link>
+      </div>
+
+      {donationsEnabled && (
+        <section className="e-card p-6 mt-4">
+          <h2 className="e-display text-xl">Comment EDENIA se finance</h2>
+          <p className="mt-3 text-sm" style={{ color: "var(--fg-muted)" }}>
+            Par des dons volontaires. Un don finance l'hébergement, les SMS de vérification et le temps
+            humain de modération — il ne donne aucun avantage à celui qui le fait. Un membre qui ne
+            donne rien a exactement le même accès qu'un membre qui donne.
+          </p>
+          <Link href="/soutenir" className="e-btn e-btn-secondary mt-4">
+            ❤️ Soutenir EDENIA
+          </Link>
+        </section>
+      )}
+
+      <section className="e-card p-6 mt-4">
+        <h2 className="e-display text-xl">Ce qui ne sera jamais payant</h2>
+        <p className="mt-3 text-sm" style={{ color: "var(--fg-muted)" }}>
+          Le badge de vérification n'est pas à vendre, et ne le sera pas. Signaler, bloquer, recevoir les
+          avertissements anti-arnaque et demander sa propre vérification restent gratuits, quoi qu'il
+          arrive au modèle économique. Une plateforme qui fait payer la protection de ses membres n'a pas
+          compris son métier.
         </p>
       </section>
     </div>

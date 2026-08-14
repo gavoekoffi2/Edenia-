@@ -26,10 +26,13 @@ export function SimulatedCheckout({
   orderRef,
   amountLabel,
   planName,
+  endpoint = "/api/v1/payments/simulate",
 }: {
   orderRef: string;
   amountLabel: string;
   planName: string;
+  /** Les dons empruntent la même page mais leur propre point d'entrée. */
+  endpoint?: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -39,7 +42,7 @@ export function SimulatedCheckout({
     setBusy(outcome);
     setError(null);
     try {
-      const response = await fetch("/api/v1/payments/simulate", {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ orderRef, outcome }),

@@ -1,16 +1,16 @@
-import { requirePermission } from "@/lib/auth/current-user";
+import Link from "next/link";
+import { requireAdminPage } from "@/lib/admin/guard";
 import { prisma } from "@/lib/db/client";
 import { REPORT_CATEGORY_LABEL, type ReportCategory } from "@/lib/config/enums";
 import { SLA_HOURS, recommendSanction, reportPriority } from "@/lib/moderation/sanctions";
 import { computeTrustScore, trustBand } from "@/lib/trust/signals";
 import { ModerationDecision } from "@/components/admin-moderation";
-import { PhotoModerationQueue } from "@/components/admin-photo-moderation";
 
 export const dynamic = "force-dynamic";
 
 /** §35 — file de signalements, triee par gravite puis par anciennete. */
 export default async function Page() {
-  await requirePermission("reports.read");
+  await requireAdminPage("reports.read");
 
   const reports = await prisma.report.findMany({
     where: { status: { in: ["OPEN", "TRIAGED"] } },
@@ -33,14 +33,9 @@ export default async function Page() {
     take: 50,
   });
 
-  const [flaggedMessages, pendingPhotos] = await Promise.all([
+  const [flaggedMessages, photosWaiting] = await Promise.all([
     prisma.message.count({ where: { flagged: true } }),
-    prisma.photo.findMany({
-      where: { moderationStatus: "PENDING" },
-      include: { user: { select: { profile: { select: { firstName: true } } } } },
-      orderBy: { createdAt: "asc" },
-      take: 20,
-    }),
+    prisma.photo.count({ where: { moderationStatus: { in: ["PENDING", "REVIEW_REQUIRED"] } } }),
   ]);
 
   return (
@@ -53,19 +48,14 @@ export default async function Page() {
         </p>
       </div>
 
-      <section>
-        <h2 className="e-display text-lg mb-2">
-          Photos en attente {pendingPhotos.length > 0 && `(${pendingPhotos.length})`}
-        </h2>
-        <PhotoModerationQueue
-          photos={pendingPhotos.map((photo) => ({
-            id: photo.id,
-            url: `/media/${photo.storageKey}`,
-            firstName: photo.user.profile?.firstName ?? "Sans nom",
-            submittedAt: photo.createdAt.toISOString(),
-          }))}
-        />
-      </section>
+      {photosWaiting > 0 && (
+        <p className="e-card p-3 text-sm">
+          {photosWaiting} photo(s) attendent un examen.{" "}
+          <Link href="/admin/profils" className="underline">
+            Ouvrir la file des profils
+          </Link>
+        </p>
+      )}
 
       <h2 className="e-display text-lg">Signalements</h2>
 

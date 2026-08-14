@@ -1,4 +1,4 @@
-import { requirePermission } from "@/lib/auth/current-user";
+import { requireAdminPage } from "@/lib/admin/guard";
 import { prisma } from "@/lib/db/client";
 import { CHECKLISTS, DOCUMENT_RETENTION_DAYS, LEVELS, churchQuestion } from "@/lib/verification/levels";
 import { VerificationDecision } from "@/components/admin-verification";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
  * dont il a besoin pour decider.
  */
 export default async function Page() {
-  await requirePermission("verification.read");
+  await requireAdminPage("verification.read");
 
   const requests = await prisma.verificationRequest.findMany({
     where: { status: { in: ["PENDING", "IN_REVIEW", "NEED_MORE_INFO"] } },

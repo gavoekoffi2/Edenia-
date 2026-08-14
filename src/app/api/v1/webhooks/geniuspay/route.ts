@@ -1,6 +1,7 @@
 import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/client";
 import { applyWebhookEvent } from "@/lib/payments/service";
+import { applyDonationWebhookEvent, isDonationRef } from "@/lib/donations/service";
 import { redactSecrets } from "@/lib/payments/geniuspay/client";
 import { verifyWebhook } from "@/lib/payments/geniuspay/webhook";
 
@@ -50,13 +51,27 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const result = await applyWebhookEvent({
-      event: verdict.event,
-      deliveryId: verdict.deliveryId,
-      environment: verdict.environment,
-      payload: verdict.payload,
-      rawBody,
-    });
+    // Un don et un abonnement empruntent le meme tuyau chez l'agregateur, mais
+    // n'ont aucun effet commun chez nous (§5). L'aiguillage se fait sur la
+    // reference de commande, deja signee : elle n'est donc pas falsifiable.
+    const metadata = (verdict.payload.data?.metadata ?? {}) as Record<string, unknown>;
+    const orderRef = typeof metadata.order_id === "string" ? metadata.order_id : null;
+
+    const result = isDonationRef(orderRef)
+      ? await applyDonationWebhookEvent({
+          event: verdict.event,
+          deliveryId: verdict.deliveryId,
+          environment: verdict.environment,
+          payload: verdict.payload,
+          rawBody,
+        })
+      : await applyWebhookEvent({
+          event: verdict.event,
+          deliveryId: verdict.deliveryId,
+          environment: verdict.environment,
+          payload: verdict.payload,
+          rawBody,
+        });
 
     // Toujours 200 sur un webhook authentifié, même si l'événement n'était pas
     // exploitable : un 4xx ferait re-tenter GeniusPay sans fin pour un

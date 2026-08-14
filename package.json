@@ -16,12 +16,18 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "rm -f prisma/dev.db && prisma db push && npm run db:seed",
     "db:seed:dev": "tsx prisma/seed-dev.ts",
-    "db:reset:dev": "rm -f prisma/dev.db && prisma db push --skip-generate && tsx prisma/seed.ts && tsx prisma/seed-dev.ts"
+    "db:reset:dev": "rm -f prisma/dev.db && prisma db push --skip-generate && tsx prisma/seed.ts && tsx prisma/seed-dev.ts",
+    "admin:create": "tsx scripts/admin.ts create",
+    "admin:reset": "tsx scripts/admin.ts reset",
+    "admin:list": "tsx scripts/admin.ts list",
+    "purge": "tsx scripts/purge.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "@types/qrcode": "^1.5.6",
     "jose": "^6.2.8",
     "next": "^16.3.0",
+    "qrcode": "^1.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "zod": "^4.4.3"

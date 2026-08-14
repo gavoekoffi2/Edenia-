@@ -40,15 +40,16 @@ de l'API et affiché à l'écran.
 | Commande | Rôle |
 |---|---|
 | `npm run dev` | Serveur de développement |
-| `npm test` | 87 tests (matching, IA, confidentialité, sécurité) |
+| `npm test` | 111 tests (matching, IA, confidentialité, sécurité, mode pilote) |
 | `npm run typecheck` | Vérification TypeScript |
 | `npm run build` | Build de production |
 | `npm run db:reset` | Réinitialise la base (référentiels seuls) |
 | `npm run db:reset:dev` | Idem + 11 profils de test togolais |
 
-Comptes de démonstration après `db:reset` : `admin@edenia.app` (super
-administrateur) et `verification@edenia.app` (agent de vérification) — connexion
-par e-mail, le code s'affiche dans la console du serveur.
+Back-office : `admin@edenia.app` (super administrateur) et
+`verification@edenia.app` (agent de vérification) — connexion par e-mail, code
+`228228`. Les 11 comptes de test togolais sont listés dans
+[`docs/11`](docs/11-phase-pilote-test-interne.md) §6.
 
 ---
 
@@ -112,8 +113,9 @@ l'optimisation la plus rentable — et personne ne remarque l'absence.
 ## Architecture
 
 ```
-docs/            00 → 10 : analyse, architecture, données, parcours, design,
-                 PWA, IA, matching, vérification, sécurité, feuille de route
+docs/            00 → 11 : analyse, architecture, données, parcours, design,
+                 PWA, IA, matching, vérification, sécurité, feuille de route,
+                 phase pilote
 prisma/          Schéma (50 entités, portable SQLite ↔ PostgreSQL) + seed
 src/app/         Pages publiques, application, back-office, API /api/v1/**
 src/components/  Composants d'interface
@@ -124,8 +126,10 @@ src/lib/         Logique métier, sans dépendance à React ni à HTTP
   trust/         Anti-arnaque, score interne
   verification/  Niveaux, listes de contrôle, question église
   payments/      Interface multi-fournisseurs Mobile Money
+  storage/       Traitement et stockage des photos
+  geo/           Référentiel pays/régions/villes + règles de numérotation
   db/            Client Prisma + frontière de sérialisation publique
-tests/           87 tests
+tests/           111 tests
 ```
 
 Pile : Next.js 16 (App Router) · React 19 · TypeScript strict · Tailwind CSS v4 ·

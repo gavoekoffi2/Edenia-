@@ -4,6 +4,7 @@ import { REPORT_CATEGORY_LABEL, type ReportCategory } from "@/lib/config/enums";
 import { SLA_HOURS, recommendSanction, reportPriority } from "@/lib/moderation/sanctions";
 import { computeTrustScore, trustBand } from "@/lib/trust/signals";
 import { ModerationDecision } from "@/components/admin-moderation";
+import { PhotoModerationQueue } from "@/components/admin-photo-moderation";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,15 @@ export default async function Page() {
     take: 50,
   });
 
-  const flaggedMessages = await prisma.message.count({ where: { flagged: true } });
+  const [flaggedMessages, pendingPhotos] = await Promise.all([
+    prisma.message.count({ where: { flagged: true } }),
+    prisma.photo.findMany({
+      where: { moderationStatus: "PENDING" },
+      include: { user: { select: { profile: { select: { firstName: true } } } } },
+      orderBy: { createdAt: "asc" },
+      take: 20,
+    }),
+  ]);
 
   return (
     <div className="space-y-5">
@@ -43,6 +52,22 @@ export default async function Page() {
           {flaggedMessages > 1 ? "s" : ""} détecté{flaggedMessages > 1 ? "s" : ""} automatiquement.
         </p>
       </div>
+
+      <section>
+        <h2 className="e-display text-lg mb-2">
+          Photos en attente {pendingPhotos.length > 0 && `(${pendingPhotos.length})`}
+        </h2>
+        <PhotoModerationQueue
+          photos={pendingPhotos.map((photo) => ({
+            id: photo.id,
+            url: `/media/${photo.storageKey}`,
+            firstName: photo.user.profile?.firstName ?? "Sans nom",
+            submittedAt: photo.createdAt.toISOString(),
+          }))}
+        />
+      </section>
+
+      <h2 className="e-display text-lg">Signalements</h2>
 
       {reports.length === 0 ? (
         <p className="e-card p-6 text-center text-sm" style={{ color: "var(--fg-muted)" }}>

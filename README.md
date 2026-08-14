@@ -7,12 +7,28 @@ Plateforme PWA de rencontres chrétiennes pour l'Afrique francophone.
 
 ---
 
-## Démarrer
+## Phase actuelle : test interne, marché pilote 🇹🇬 Togo
 
 ```bash
 npm install
-npm run db:reset     # crée la base SQLite et la peuple (15 pays, 10 profils à Lomé)
-npm run dev          # http://localhost:3000
+npm run db:reset:dev   # base + 11 profils de test togolais
+npm run dev            # http://localhost:3000
+```
+
+Créez un compte sur `/inscription` avec un numéro togolais (8 chiffres,
+commençant par 7 ou 9). **Le code de vérification est `228228`**, également
+affiché à l'écran : aucun SMS n'est envoyé.
+
+Le mode développement ne désactive aucun contrôle — le code est simplement
+prévisible, puis haché, salé, comparé à temps constant et soumis aux mêmes
+limites qu'en production. `AUTH_MODE=development` **fait échouer le démarrage**
+en production. Détails : [`docs/11`](docs/11-phase-pilote-test-interne.md).
+
+## Démarrer sans données de test
+
+```bash
+npm run db:reset     # référentiels seuls, sans profils fictifs
+npm run dev
 ```
 
 **Aucun service externe n'est requis.** Les fournisseurs IA, SMS, e-mail et
@@ -27,7 +43,8 @@ de l'API et affiché à l'écran.
 | `npm test` | 87 tests (matching, IA, confidentialité, sécurité) |
 | `npm run typecheck` | Vérification TypeScript |
 | `npm run build` | Build de production |
-| `npm run db:reset` | Réinitialise et repeuple la base |
+| `npm run db:reset` | Réinitialise la base (référentiels seuls) |
+| `npm run db:reset:dev` | Idem + 11 profils de test togolais |
 
 Comptes de démonstration après `db:reset` : `admin@edenia.app` (super
 administrateur) et `verification@edenia.app` (agent de vérification) — connexion
@@ -43,12 +60,12 @@ par e-mail, le code s'affiche dans la console du serveur.
 | **Matching** | 7 dimensions pondérées, critères essentiels bilatéraux, explication filtrée par la visibilité — [`docs/07`](docs/07-matching.md) |
 | **EDENIA AI** | Onboarding conversationnel texte/voix, extraction ancrée, garde-fous exécutables — [`docs/06`](docs/06-edenia-ai.md) |
 | **Confiance** | 5 niveaux de vérification, anti-arnaque, trust score interne — [`docs/08`](docs/08-verification.md) |
-| **Application** | Auth OTP, profil, découverte, likes, matchs, chat, Premium, back-office |
+| **Application** | Auth OTP, profil, photos, découverte, likes, matchs, chat, Premium, back-office |
 | **PWA** | Installable, optimisée 3G et téléphones d'entrée de gamme — [`docs/05`](docs/05-pwa.md) |
 | **Site public** | 16 pages rédigées et optimisées SEO |
 
-Reste à faire avant une ouverture au public : téléversement des photos,
-agrégateur Mobile Money réel, passerelle SMS réelle, durcissement final.
+Reste à faire avant une ouverture au public : agrégateur Mobile Money réel,
+passerelle SMS réelle, modération automatique des images, durcissement final.
 Détail et priorités dans [`docs/10`](docs/10-roadmap-modules.md).
 
 ---

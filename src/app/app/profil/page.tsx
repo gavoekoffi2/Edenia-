@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/client";
 import { toPublicProfile } from "@/lib/db/serialize";
 import { candidateInclude } from "@/lib/matching/from-db";
 import { Avatar, Chip, EmptyState } from "@/components/ui";
+import { PhotoManager } from "@/components/photo-manager";
 
 export const metadata = { title: "Mon profil", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -78,6 +79,8 @@ export default async function Page() {
           n'apparaissent jamais sur votre profil public.
         </p>
       </div>
+
+      <PhotoManager />
 
       <div className="e-card p-4">
         <p className="font-semibold text-sm">Complétude : {row.profile.completeness} %</p>

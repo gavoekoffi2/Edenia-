@@ -12,19 +12,26 @@ export default async function Page() {
 
   const preview = await buildOnboardingPreview(user.id);
 
-  // §4 : on ne propose que les villes des pays effectivement ouverts, plus les
-  // pays de diaspora — inutile de laisser choisir une ville sans communauté.
+  // §4 + phase pilote : uniquement les villes des pays effectivement ouverts.
+  // Aujourd'hui le Togo seul ; ouvrir un pays (`isLaunched`) suffit à faire
+  // apparaître ses villes ici, sans modifier cette requête.
   const cities = await prisma.city.findMany({
-    where: { country: { OR: [{ isLaunched: true }, { isAfrican: false }] } },
+    where: { country: { isLaunched: true } },
     include: { country: true },
-    orderBy: [{ countryCode: "asc" }, { nameFr: "asc" }],
+    orderBy: [{ population: "desc" }, { nameFr: "asc" }],
   });
+
+  const singleCountry = new Set(cities.map((city) => city.countryCode)).size <= 1;
 
   return (
     <ProfileReview
       rows={preview.rows}
       generated={preview.generated}
-      cities={cities.map((city) => ({ id: city.id, label: `${city.nameFr} — ${city.country.nameFr}` }))}
+      cities={cities.map((city) => ({
+        id: city.id,
+        // Inutile de répéter « — Togo » sur chaque ligne tant qu'un seul pays est ouvert.
+        label: singleCountry ? city.nameFr : `${city.nameFr} — ${city.country.nameFr}`,
+      }))}
       defaultCityId={null}
     />
   );

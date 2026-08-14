@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/client";
 import { PLAN_OFFERS, formatXof } from "@/lib/premium/entitlements";
 import { methodsForCountry } from "@/lib/payments/provider";
 import { CheckoutForm } from "@/components/checkout-form";
+import { serviceStatuses } from "@/lib/config/mode";
 
 export const metadata = { title: "EDENIA Premium", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -16,6 +17,7 @@ export default async function Page() {
   ]);
 
   const methods = methodsForCountry(profile?.countryCode ?? "TG");
+  const paymentsSimulated = serviceStatuses().find((s) => s.key === "payments")?.mode === "development";
 
   if (tier === "PREMIUM") {
     return (
@@ -37,6 +39,23 @@ export default async function Page() {
           ne sera pas traité plus vite.
         </p>
       </div>
+
+      {paymentsSimulated && (
+        <div
+          className="rounded-xl p-3 text-sm"
+          style={{ background: "var(--color-gold-100)", border: "1px solid var(--color-gold-400)", color: "#7a5216" }}
+          role="note"
+        >
+          <p className="font-bold">🟡 PAIEMENT — MODE TEST</p>
+          <p className="mt-1">
+            Aucun agrégateur Mobile Money n'est branché : aucun débit réel n'aura lieu. L'abonnement
+            s'active tout de même, pour permettre de tester les fonctions Premium.
+          </p>
+          <p className="mt-1 text-xs">
+            Astuce de test : un numéro se terminant par 0 simule un échec de paiement.
+          </p>
+        </div>
+      )}
 
       <div className="space-y-2">
         {PLAN_OFFERS.map((offer) => (

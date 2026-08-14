@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/client";
+import { authLimits } from "@/lib/config/mode";
 
 /**
  * Limitation de debit (§50).
@@ -46,11 +47,18 @@ export async function rateLimit(
   return { allowed: true, remaining: Math.max(0, limit - updated.count), resetAt: existing.windowEnd };
 }
 
-/** Presets utilises par les routes sensibles. */
+/**
+ * Presets utilises par les routes sensibles.
+ *
+ * Les seuils lies a l'authentification suivent le mode (src/lib/config/mode.ts).
+ * Le mecanisme reste identique dans les deux modes : seul le nombre autorise
+ * change, pour qu'une session de test qui cree une dizaine de comptes ne se
+ * bloque pas elle-meme.
+ */
 export const LIMITS = {
-  otpRequest: { limit: 3, windowMs: 3_600_000 },
-  otpVerify: { limit: 10, windowMs: 900_000 },
-  login: { limit: 10, windowMs: 900_000 },
+  otpRequest: { limit: authLimits.otpRequestPerHourPerIp, windowMs: 3_600_000 },
+  otpVerify: { limit: authLimits.otpVerifyPerWindow, windowMs: 900_000 },
+  login: { limit: authLimits.otpVerifyPerWindow, windowMs: 900_000 },
   message: { limit: 60, windowMs: 60_000 },
   report: { limit: 10, windowMs: 3_600_000 },
   aiTurn: { limit: 40, windowMs: 3_600_000 },

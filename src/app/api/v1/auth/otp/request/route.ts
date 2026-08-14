@@ -15,7 +15,8 @@ export const POST = handler(async (request) => {
   const ip = clientIp(request);
 
   // Limitation par IP, en plus de la limitation par destination du module OTP.
-  const limit = await rateLimit(`otp:req:${hashIp(ip) ?? "anon"}`, LIMITS.otpRequest.limit * 2, LIMITS.otpRequest.windowMs);
+  // Le seuil vient du preset, qui suit deja le mode (dev/prod).
+  const limit = await rateLimit(`otp:req:${hashIp(ip) ?? "anon"}`, LIMITS.otpRequest.limit, LIMITS.otpRequest.windowMs);
   if (!limit.allowed) return fail("Trop de demandes. Réessayez plus tard.", 429);
 
   const result = await startAuth({

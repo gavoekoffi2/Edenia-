@@ -1,5 +1,7 @@
 import { randomInt } from "node:crypto";
 import { hashWithSalt, newSalt, safeEquals } from "@/lib/crypto/field";
+import { DEV_OTP_CODE, authLimits, isDevAuth } from "@/lib/config/mode";
+import { validatePhone } from "@/lib/geo/phone";
 
 /**
  * §8 et §50 — inscription par un seul canal verifie, avec OTP.
@@ -14,8 +16,12 @@ export type OtpPurpose = "SIGNUP" | "LOGIN" | "ADD_CONTACT" | "RECOVERY";
 export const OTP_LENGTH = 6;
 export const OTP_TTL_MS = 10 * 60 * 1000;
 export const OTP_MAX_ATTEMPTS = 5;
-/** Nombre de demandes autorisees par destination et par heure. */
-export const OTP_MAX_CHALLENGES_PER_HOUR = 3;
+/**
+ * Demandes autorisees par destination et par heure. Le seuil est plus large en
+ * developpement pour ne pas bloquer une session de test qui cree plusieurs
+ * comptes d'affilee — le mecanisme, lui, reste actif dans les deux modes.
+ */
+export const OTP_MAX_CHALLENGES_PER_HOUR = authLimits.otpRequestPerHourPerDestination;
 
 export interface OtpRecord {
   id: string;
@@ -39,8 +45,17 @@ export interface OtpStore {
   consume(id: string): Promise<void>;
 }
 
-/** Genere un code numerique a partir d'une source cryptographique. */
+/**
+ * Genere le code OTP.
+ *
+ * En mode developpement, le code est **previsible** (constante documentee,
+ * affichee dans l'interface). C'est la seule difference avec la production :
+ * le code est ensuite hache avec un sel, stocke, compare a temps constant,
+ * soumis au compteur de tentatives et a l'expiration, exactement comme un code
+ * aleatoire. On teste donc le vrai chemin de verification, pas un raccourci.
+ */
 export function generateCode(length = OTP_LENGTH): string {
+  if (isDevAuth) return DEV_OTP_CODE;
   let code = "";
   for (let i = 0; i < length; i += 1) code += randomInt(0, 10).toString();
   return code;
@@ -153,33 +168,13 @@ export const DIAL_CODES: Record<string, string> = {
 };
 
 /**
- * Met un numero au format E.164.
- *
- * Les utilisateurs saisissent souvent leur numero en format local (« 90 12 34 56 »).
- * Refuser cette saisie serait une friction inutile (§60) : on complete avec
- * l'indicatif du pays choisi.
+ * Met un numero au format E.164, en appliquant les regles de numerotation du
+ * pays (src/lib/geo/phone.ts). Rend null si le numero est invalide ;
+ * `validatePhone` donne le motif detaille quand on veut l'afficher.
  */
 export function normalizePhone(raw: string, countryCode: string): string | null {
-  const dial = DIAL_CODES[countryCode.toUpperCase()];
-  if (!dial) return null;
-
-  const cleaned = raw.replace(/[\s.\-()]/g, "");
-  if (!cleaned) return null;
-
-  let digits: string;
-  if (cleaned.startsWith("+")) {
-    if (!cleaned.startsWith(dial)) return null; // incoherence pays / indicatif
-    digits = cleaned.slice(dial.length);
-  } else if (cleaned.startsWith("00")) {
-    const withPlus = `+${cleaned.slice(2)}`;
-    if (!withPlus.startsWith(dial)) return null;
-    digits = withPlus.slice(dial.length);
-  } else {
-    digits = cleaned.replace(/^0+/, "");
-  }
-
-  if (!/^\d{6,12}$/.test(digits)) return null;
-  return `${dial}${digits}`;
+  const result = validatePhone(raw, countryCode);
+  return result.ok ? result.e164 : null;
 }
 
 export function normalizeEmail(raw: string): string | null {

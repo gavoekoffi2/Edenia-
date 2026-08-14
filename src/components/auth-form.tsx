@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { dialCodeOptions } from "@/lib/geo/data";
+import { phoneRuleFor } from "@/lib/geo/phone";
 
 /**
  * §8 et §62 — étapes 2 et 3 du parcours idéal.
@@ -17,22 +18,32 @@ import { dialCodeOptions } from "@/lib/geo/data";
 type Channel = "PHONE" | "EMAIL";
 type Step = "DESTINATION" | "CODE";
 
+/**
+ * §1 de la phase pilote : seuls les pays lances apparaissent. Aujourd'hui, le
+ * Togo seul — le selecteur se replie donc en indicatif fixe. Ouvrir le Benin
+ * suffit a le faire reapparaitre, sans toucher a ce composant.
+ */
 const COUNTRIES = dialCodeOptions();
+const SINGLE_COUNTRY = COUNTRIES.length <= 1;
+const DEFAULT_COUNTRY = COUNTRIES[0]?.code ?? "TG";
 
 export function AuthForm({ mode }: { mode: "signup" | "login" }) {
   const router = useRouter();
   const [channel, setChannel] = useState<Channel>("PHONE");
   const [step, setStep] = useState<Step>("DESTINATION");
-  const [countryCode, setCountryCode] = useState("TG");
+  const [countryCode, setCountryCode] = useState(DEFAULT_COUNTRY);
   const [destination, setDestination] = useState("");
   const [code, setCode] = useState("");
   const [challengeId, setChallengeId] = useState("");
   const [masked, setMasked] = useState("");
   const [devCode, setDevCode] = useState<string | null>(null);
+  const [devMode, setDevMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const dial = COUNTRIES.find((c) => c.code === countryCode)?.dialCode ?? "+228";
+  const country = COUNTRIES.find((c) => c.code === countryCode) ?? COUNTRIES[0];
+  const dial = country?.dialCode ?? "+228";
+  const rule = phoneRuleFor(countryCode);
 
   async function requestCode(event: React.FormEvent) {
     event.preventDefault();
@@ -52,6 +63,7 @@ export function AuthForm({ mode }: { mode: "signup" | "login" }) {
       setChallengeId(payload.data.challengeId);
       setMasked(payload.data.maskedDestination);
       setDevCode(payload.data.devCode ?? null);
+      setDevMode(Boolean(payload.data.devMode));
       setStep("CODE");
     } catch {
       setError("Connexion impossible. Vérifiez votre réseau et réessayez.");
@@ -94,10 +106,21 @@ export function AuthForm({ mode }: { mode: "signup" | "login" }) {
           </p>
         </div>
 
-        {devCode && (
-          <p className="text-sm rounded-xl p-3" style={{ background: "var(--color-sand-200)" }}>
-            Mode développement — code : <strong>{devCode}</strong>
-          </p>
+        {devMode && devCode && (
+          <div
+            className="rounded-xl p-3 text-sm"
+            style={{ background: "var(--color-gold-100)", border: "1px solid var(--color-gold-400)", color: "#7a5216" }}
+            role="note"
+          >
+            <p className="font-bold">🟡 OTP — MODE TEST</p>
+            <p className="mt-1">
+              Aucun SMS n'a été envoyé. Code de test :{" "}
+              <strong style={{ fontSize: "1.125rem", letterSpacing: "0.15em" }}>{devCode}</strong>
+            </p>
+            <p className="mt-1 text-xs">
+              En production, un code aléatoire est envoyé par SMS et n'apparaît jamais à l'écran.
+            </p>
+          </div>
         )}
 
         <div>
@@ -178,33 +201,46 @@ export function AuthForm({ mode }: { mode: "signup" | "login" }) {
             Numéro de téléphone
           </label>
           <div className="flex gap-2">
-            <select
-              className="e-input"
-              style={{ width: "9rem" }}
-              value={countryCode}
-              onChange={(event) => setCountryCode(event.target.value)}
-              aria-label="Pays"
-            >
-              {COUNTRIES.map((country) => (
-                <option key={country.code} value={country.code}>
-                  {country.flag} {country.dialCode}
-                </option>
-              ))}
-            </select>
+            {SINGLE_COUNTRY ? (
+              <span
+                className="e-input inline-flex items-center gap-1.5 shrink-0"
+                style={{ width: "auto", background: "var(--bg)" }}
+                aria-label={`Pays : ${country?.nameFr ?? "Togo"}`}
+              >
+                <span aria-hidden="true">{country?.flag}</span>
+                <span className="font-semibold">{dial}</span>
+              </span>
+            ) : (
+              <select
+                className="e-input"
+                style={{ width: "9rem" }}
+                value={countryCode}
+                onChange={(event) => setCountryCode(event.target.value)}
+                aria-label="Pays"
+              >
+                {COUNTRIES.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.flag} {option.dialCode}
+                  </option>
+                ))}
+              </select>
+            )}
             <input
               id="phone"
               className="e-input"
               type="tel"
               inputMode="tel"
               autoComplete="tel-national"
-              placeholder="90 12 34 56"
+              placeholder={rule?.placeholder ?? "90 12 34 56"}
               value={destination}
               onChange={(event) => setDestination(event.target.value)}
               required
             />
           </div>
           <p className="text-xs mt-1.5" style={{ color: "var(--fg-muted)" }}>
-            Format local accepté. Nous complétons avec {dial}.
+            {SINGLE_COUNTRY
+              ? `EDENIA démarre au ${country?.nameFr ?? "Togo"}. ${rule?.hint ?? ""} Format local accepté.`
+              : `Format local accepté. Nous complétons avec ${dial}.`}
           </p>
         </div>
       ) : (

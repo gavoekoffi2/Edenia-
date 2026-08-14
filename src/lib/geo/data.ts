@@ -377,13 +377,37 @@ export function countryByCode(code: string): CountrySeed | undefined {
   return COUNTRIES.find((c) => c.code === code.toUpperCase());
 }
 
-/** §7 : selection du pays au format international, ordonnee par ordre de lancement. */
-export function dialCodeOptions(): Array<{ code: string; nameFr: string; dialCode: string; flag: string }> {
-  const FLAGS: Record<string, string> = {
-    TG: "🇹🇬", BJ: "🇧🇯", CI: "🇨🇮", CM: "🇨🇲", SN: "🇸🇳", CD: "🇨🇩", BF: "🇧🇫",
-    GN: "🇬🇳", CG: "🇨🇬", GA: "🇬🇦", ML: "🇲🇱", NE: "🇳🇪", FR: "🇫🇷", BE: "🇧🇪", CA: "🇨🇦",
-  };
+export const FLAGS: Record<string, string> = {
+  TG: "🇹🇬", BJ: "🇧🇯", CI: "🇨🇮", CM: "🇨🇲", SN: "🇸🇳", CD: "🇨🇩", BF: "🇧🇫",
+  GN: "🇬🇳", CG: "🇨🇬", GA: "🇬🇦", ML: "🇲🇱", NE: "🇳🇪", FR: "🇫🇷", BE: "🇧🇪", CA: "🇨🇦",
+};
+
+export interface CountryOption {
+  code: string;
+  nameFr: string;
+  dialCode: string;
+  flag: string;
+}
+
+/** Pays pilote de la phase actuelle (§4). Une constante, pas une valeur en dur. */
+export const PILOT_COUNTRY = "TG";
+
+/**
+ * §7 : selection du pays, ordonnee par ordre de lancement.
+ *
+ * `onlyLaunched` (defaut) ne rend que les pays effectivement ouverts — au
+ * lancement, le Togo seul. L'experience reste donc mono-pays, sans que le code
+ * ne le soit : ouvrir le Benin consiste a passer `isLaunched` a true, et le
+ * selecteur reapparait tout seul.
+ */
+export function dialCodeOptions(onlyLaunched = true): CountryOption[] {
   return [...COUNTRIES]
+    .filter((c) => (onlyLaunched ? c.isLaunched : true))
     .sort((a, b) => (a.launchOrder ?? 99) - (b.launchOrder ?? 99))
     .map((c) => ({ code: c.code, nameFr: c.nameFr, dialCode: c.dialCode, flag: FLAGS[c.code] ?? "🌍" }));
+}
+
+/** Le pilote est-il encore mono-pays ? Pilote l'affichage du selecteur. */
+export function isSingleCountryMode(): boolean {
+  return dialCodeOptions().length <= 1;
 }

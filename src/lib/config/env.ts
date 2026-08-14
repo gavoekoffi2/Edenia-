@@ -13,6 +13,15 @@ const schema = z.object({
   SESSION_SECRET: z.string().min(32),
   FIELD_ENCRYPTION_KEY: z.string().min(16),
 
+  /**
+   * Mode d'authentification (voir src/lib/config/mode.ts).
+   * - development : code OTP fixe et affiche, aucun SMS envoye. Tous les
+   *   controles (hachage, tentatives, expiration, limitation) restent actifs.
+   * - production  : code aleatoire envoye par la passerelle SMS.
+   * Par defaut : development hors production, production sinon.
+   */
+  AUTH_MODE: z.enum(["development", "production"]).optional(),
+
   AI_PROVIDER: z.enum(["rulebased", "anthropic"]).default("rulebased"),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default("claude-sonnet-5"),
@@ -57,7 +66,12 @@ function load() {
     throw new Error(`Configuration EDENIA invalide :\n${details}`);
   }
 
-  const env = parsed.data;
+  const parsedEnv = parsed.data;
+  // Defaut sur : jamais de mode developpement implicite en production.
+  const env = {
+    ...parsedEnv,
+    AUTH_MODE: parsedEnv.AUTH_MODE ?? (parsedEnv.NODE_ENV === "production" ? "production" : "development"),
+  } as const;
 
   // `next build` s'execute avec NODE_ENV=production, mais un build n'a pas
   // besoin des secrets de production — les exiger la casserait toute chaine
@@ -74,6 +88,15 @@ function load() {
     }
     if (env.FIELD_ENCRYPTION_KEY === DEV_FALLBACKS.FIELD_ENCRYPTION_KEY) {
       throw new Error("FIELD_ENCRYPTION_KEY de developpement interdit en production.");
+    }
+    // Garde-fou le plus important de ce mode : une authentification simulee ne
+    // doit jamais pouvoir tourner sur un serveur de production, meme par
+    // erreur de configuration. L'application refuse de demarrer.
+    if (env.AUTH_MODE === "development") {
+      throw new Error(
+        "AUTH_MODE=development est interdit en production : l'OTP serait previsible. " +
+          "Retirez la variable ou passez-la a « production ».",
+      );
     }
   }
 

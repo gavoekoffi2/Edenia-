@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db/client";
 import { hashIp, pseudonymize } from "@/lib/crypto/field";
 import { getEmailProvider, getSmsProvider, TEMPLATES } from "@/lib/notifications";
-import { isDev } from "@/lib/config/env";
+import { DEV_OTP_CODE, isDevAuth } from "@/lib/config/mode";
+import { validatePhone } from "@/lib/geo/phone";
 import {
   maskDestination,
   normalizeEmail,
@@ -50,24 +51,28 @@ export interface StartAuthResult {
   challengeId?: string;
   maskedDestination?: string;
   error?: string;
-  /** Uniquement en developpement : evite d'avoir besoin d'un vrai SMS. */
+  /**
+   * Mode developpement uniquement : le code est renvoye au client pour
+   * pouvoir tester sans passerelle SMS. En production, ce champ est toujours
+   * absent — c'est verifie par un test.
+   */
   devCode?: string;
+  /** Permet a l'interface d'afficher sans ambiguite « MODE TEST ». */
+  devMode?: boolean;
 }
 
 export async function startAuth(input: StartAuthInput): Promise<StartAuthResult> {
-  const destination =
-    input.channel === "PHONE"
-      ? normalizePhone(input.rawDestination, input.countryCode ?? "TG")
-      : normalizeEmail(input.rawDestination);
+  let destination: string | null;
 
-  if (!destination) {
-    return {
-      ok: false,
-      error:
-        input.channel === "PHONE"
-          ? "Ce numéro ne semble pas valide. Vérifiez le pays et les chiffres saisis."
-          : "Cette adresse e-mail ne semble pas valide.",
-    };
+  if (input.channel === "PHONE") {
+    // On remonte le motif exact plutot qu'un « numero invalide » generique :
+    // c'est ce qui permet a la personne de corriger sa saisie.
+    const validation = validatePhone(input.rawDestination, input.countryCode ?? "TG");
+    if (!validation.ok) return { ok: false, error: validation.reason };
+    destination = validation.e164;
+  } else {
+    destination = normalizeEmail(input.rawDestination);
+    if (!destination) return { ok: false, error: "Cette adresse e-mail ne semble pas valide." };
   }
 
   const result = await requestOtp({ channel: input.channel, destination, purpose: input.purpose ?? "SIGNUP", store });
@@ -82,16 +87,22 @@ export async function startAuth(input: StartAuthInput): Promise<StartAuthResult>
     };
   }
 
-  // L'envoi ne doit pas faire echouer la demande : l'utilisateur peut redemander
-  // un code, et un echec d'operateur ne doit pas ressembler a un bug d'EDENIA.
-  try {
-    if (input.channel === "PHONE") {
-      await getSmsProvider().send(destination, TEMPLATES.otpSms(result.code!));
-    } else {
-      await getEmailProvider().send(destination, TEMPLATES.otpEmailSubject(), TEMPLATES.otpEmailBody(result.code!));
+  // §2 de la demande : en mode developpement, AUCUN envoi n'est tente. On ne
+  // simule pas un envoi reussi — on n'envoie simplement rien, et le code est
+  // rendu au client, clairement etiquete.
+  if (!isDevAuth) {
+    // L'envoi ne doit pas faire echouer la demande : l'utilisateur peut
+    // redemander un code, et un echec d'operateur ne doit pas ressembler a un
+    // bug d'EDENIA.
+    try {
+      if (input.channel === "PHONE") {
+        await getSmsProvider().send(destination, TEMPLATES.otpSms(result.code!));
+      } else {
+        await getEmailProvider().send(destination, TEMPLATES.otpEmailSubject(), TEMPLATES.otpEmailBody(result.code!));
+      }
+    } catch (error) {
+      console.error("Envoi du code impossible", error);
     }
-  } catch (error) {
-    console.error("Envoi du code impossible", error);
   }
 
   await audit({
@@ -105,7 +116,8 @@ export async function startAuth(input: StartAuthInput): Promise<StartAuthResult>
     ok: true,
     challengeId: result.challengeId,
     maskedDestination: maskDestination(input.channel, destination),
-    devCode: isDev ? result.code : undefined,
+    devCode: isDevAuth ? DEV_OTP_CODE : undefined,
+    devMode: isDevAuth || undefined,
   };
 }
 

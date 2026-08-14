@@ -14,6 +14,7 @@ import {
   type OtpStore,
 } from "./otp";
 import { createSessionToken } from "./session";
+import { getBooleanSetting } from "@/lib/settings/service";
 
 /** Adaptateur Prisma de l'interface `OtpStore` (le module OTP reste pur). */
 const store: OtpStore = {
@@ -173,6 +174,29 @@ export async function completeAuth(challengeId: string, code: string, ip?: strin
 
     await audit({ event: "AUTH_LOGIN", actorType: "USER", actorRef: pseudonymize(existing.id), ip });
     return { ok: true, token, userId: existing.id, isNewUser: false };
+  }
+
+  /*
+   * §22 — fermeture des inscriptions.
+   *
+   * Le controle est ici, au moment de la creation, et non a la demande du
+   * code. C'est un choix : refuser un code aux seules destinations inconnues
+   * transformerait l'ecran de connexion en oracle — « ce numero est-il membre
+   * d'EDENIA ? » se lit alors dans la reponse. Ici, l'appelant possede deja le
+   * code envoye a cette destination : il n'apprend rien qu'il ne sache.
+   */
+  if (!(await getBooleanSetting("access.registration_open"))) {
+    await audit({
+      event: "SIGNUP_REFUSED_CLOSED",
+      actorType: "SYSTEM",
+      actorRef: pseudonymize(destination),
+      ip,
+    });
+    return {
+      ok: false,
+      error:
+        "Les inscriptions sont momentanément fermées. Votre contact est bien vérifié : réessayez plus tard.",
+    };
   }
 
   const created = await prisma.user.create({

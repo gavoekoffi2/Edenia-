@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db/client";
 import { BrandLink } from "@/components/brand";
 import { TabBar } from "@/components/tabbar";
+import { getSetting } from "@/lib/settings/service";
 
 export const metadata: Metadata = {
   title: "EDENIA",
@@ -30,7 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     );
   }
 
-  const [unreadNotifications, unreadMessages] = await Promise.all([
+  const [unreadNotifications, unreadMessages, banner] = await Promise.all([
     prisma.notification.count({ where: { userId: user.id, readAt: null } }),
     prisma.message.count({
       where: {
@@ -41,6 +42,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         },
       },
     }),
+    // §22 — bandeau d'information posé depuis le back-office. Vide = rien.
+    getSetting("comm.banner"),
   ]);
 
   return (
@@ -69,6 +72,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </div>
       </header>
+
+      {banner.trim() && (
+        <p
+          className="mx-auto w-full max-w-2xl px-4 py-2.5 text-sm"
+          role="status"
+          style={{ background: "var(--color-gold-100)", color: "#7a5216" }}
+        >
+          {banner}
+        </p>
+      )}
 
       <main id="contenu" className="flex-1 mx-auto w-full max-w-2xl px-4 py-5">
         {children}

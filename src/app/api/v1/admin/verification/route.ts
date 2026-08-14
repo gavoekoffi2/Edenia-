@@ -2,7 +2,7 @@ import { z } from "zod";
 import { VERIFICATION_KIND } from "@/lib/config/enums";
 import { recordAdminAction, requireAdmin } from "@/lib/admin/service";
 import { prisma } from "@/lib/db/client";
-import { validateDecision } from "@/lib/verification/levels";
+import { validateDecision, verificationExpiryFrom } from "@/lib/verification/levels";
 import { TEMPLATES } from "@/lib/notifications";
 import { fail, handler, ok, parseBody } from "@/lib/api/respond";
 
@@ -54,12 +54,17 @@ export const POST = handler(async (request) => {
 
   const target = { where: { userId: record.userId } };
 
+  const decidedAt = new Date();
+
   if (body.kind === "IDENTITY") {
     await prisma.identityVerification.update({
       ...target,
       data: {
         status,
-        verifiedAt: body.approve ? new Date() : null,
+        verifiedAt: body.approve ? decidedAt : null,
+        // §29 : le champ existait sans que personne ne l'ecrive. Une date
+        // d'expiration jamais renseignee est une date d'expiration absente.
+        expiresAt: body.approve ? verificationExpiryFrom(decidedAt) : null,
         birthDateChecked: body.checkedCodes.includes("AGE_18"),
         // §26 : les pièces sont détruites après décision, quelle qu'elle soit.
         documentKeyEnc: null,

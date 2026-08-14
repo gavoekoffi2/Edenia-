@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth/current-user";
 import { currentTier, sendLike } from "@/lib/discovery/likes";
 import { fail, handler, ok, parseBody } from "@/lib/api/respond";
+import { getBooleanSetting } from "@/lib/settings/service";
 
 const schema = z.object({
   targetId: z.string().min(1),
@@ -10,6 +11,13 @@ const schema = z.object({
 
 export const POST = handler(async (request) => {
   const user = await requireUser();
+
+  // §22 : une pause de la découverte qui laisserait l'API ouverte serait
+  // cosmétique. Les conversations existantes, elles, ne sont pas touchées.
+  if (!(await getBooleanSetting("access.discovery_open"))) {
+    return fail("La découverte est momentanément suspendue. Vos conversations restent accessibles.", 503);
+  }
+
   const body = await parseBody(request, schema);
   const tier = await currentTier(user.id);
 

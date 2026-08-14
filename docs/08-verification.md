@@ -122,3 +122,27 @@ Volontairement étroit : `verification.read`, `verification.decide`,
 Il n'a **pas** accès aux conversations, aux paiements, au bannissement, ni à la
 gestion des administrateurs. Le §36 le demande explicitement, et un test le
 vérifie.
+
+
+## Validité dans le temps (§29)
+
+Une vérification humaine vaut **24 mois**. Passé ce délai, la tâche de purge
+repasse le dossier en `EXPIRED` : le badge tombe, la personne est prévenue, et
+elle peut redemander une vérification — gratuitement, comme toujours (§31).
+
+Le choix de 24 mois suit l'horizon déjà retenu pour l'inactivité (docs/02 §5).
+Un contrôle d'identité de plus de deux ans ne dit plus grand-chose de la
+personne qui se présente aujourd'hui : un badge qui ne se périme jamais finit
+par affirmer quelque chose que plus personne n'a vérifié.
+
+`achievedLevels` n'accorde un niveau que sur `APPROVED`. `EXPIRED`, comme
+`REJECTED` ou `NEED_MORE_INFO`, n'ouvre rien — un test le vérifie pour **chaque**
+statut, pas seulement pour celui auquel on pense.
+
+### Vocabulaire
+
+Les statuts stockés (`PENDING`, `IN_REVIEW`, `NEED_MORE_INFO`, `APPROVED`,
+`REJECTED`, `CANCELLED`, `EXPIRED`) sont traduits en un seul endroit,
+`VERIFICATION_STATUS_LABEL`. Les codes ne sont pas renommés : ils sont écrits
+dans les bases déjà créées, et renommer une valeur persistée pour un gain
+purement lexical à la veille d'une bêta serait un mauvais échange.

@@ -223,6 +223,7 @@ relancer deux fois de suite ne fait rien de plus la seconde fois.
 | Compteurs de débit | Fenêtres expirées, 24 h de grâce |
 | Événements webhook | 90 jours. Les paiements eux-mêmes sont conservés (comptabilité) |
 | Conversations IA terminées | 180 jours. Le profil qui en est issu reste |
+| Vérifications d'identité | Repassées en `EXPIRED` après 24 mois — le badge tombe, le dossier reste |
 | Invitations administrateur | Supprimées à expiration |
 
 Le `AuditLog` survit à tout, parce que ses identifiants sont pseudonymisés : il

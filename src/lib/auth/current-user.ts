@@ -1,7 +1,6 @@
 import { cache } from "react";
 import { prisma } from "@/lib/db/client";
 import { readSessionFromCookies } from "./session";
-import { assertCan, type Permission } from "./rbac";
 
 /**
  * Recuperation de l'utilisateur courant. `cache()` evite de refaire la requete
@@ -59,11 +58,18 @@ export async function requireUser(): Promise<CurrentUser> {
   return user;
 }
 
-export async function requirePermission(permission: Permission): Promise<CurrentUser> {
-  const user = await requireUser();
-  assertCan(user.role, permission);
-  return user;
-}
+/*
+ * `requirePermission(permission)` a ete retiree.
+ *
+ * Elle accordait un droit d'administration sur le seul role porte par la
+ * session utilisateur, sans exiger le mot de passe ni le second facteur. Depuis
+ * l'introduction de l'elevation (docs/09 §2.1), ce n'est plus le controle
+ * voulu — et laisser la fonction en place aurait garanti que quelqu'un la
+ * reprenne pour la prochaine route d'administration.
+ *
+ * Pour une route d'API : `requireAdmin(permission)` (src/lib/admin/service.ts).
+ * Pour une page          : `requireAdminPage(permission)` (src/lib/admin/guard.ts).
+ */
 
 export class UnauthorizedError extends Error {
   constructor() {

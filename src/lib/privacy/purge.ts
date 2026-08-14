@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/client";
 import { deletePhoto } from "@/lib/storage/photos";
+import { VERIFICATION_VALIDITY_MONTHS } from "@/lib/verification/levels";
 
 /**
  * §47, M3 — application des durees de retention.
@@ -166,7 +167,40 @@ export async function runPurge(options: { dryRun?: boolean; now?: Date } = {}): 
     `Supprimées après ${RETENTION.aiConversationDays} jours. Le profil qui en est issu reste, la conversation non.`,
   );
 
-  // 8. Invitations d'administrateurs expirees -------------------------------
+  // 8. Verifications arrivees a echeance ------------------------------------
+  //
+  // Ce n'est pas une suppression : le dossier passe en EXPIRED, le badge tombe,
+  // et la personne peut redemander une verification — gratuitement (§31). Un
+  // badge qui ne se perime jamais finit par affirmer quelque chose que personne
+  // n'a verifie depuis des annees.
+  const staleVerifications = await prisma.identityVerification.findMany({
+    where: { status: "APPROVED", expiresAt: { lte: now } },
+    select: { id: true, userId: true },
+  });
+  if (!dryRun && staleVerifications.length > 0) {
+    await prisma.identityVerification.updateMany({
+      where: { id: { in: staleVerifications.map((row) => row.id) } },
+      data: { status: "EXPIRED" },
+    });
+    await prisma.notification
+      .createMany({
+        data: staleVerifications.map((row) => ({
+          userId: row.userId,
+          kind: "VERIFICATION",
+          title: "Votre vérification a expiré",
+          body: "Elle était valable deux ans. La renouveler est gratuit et prend quelques minutes.",
+          href: "/app/confiance",
+        })),
+      })
+      .catch(() => undefined);
+  }
+  record(
+    "Vérifications expirées",
+    staleVerifications.length,
+    `Validité de ${VERIFICATION_VALIDITY_MONTHS} mois. Le badge tombe, le dossier reste, la redemande est gratuite.`,
+  );
+
+  // 9. Invitations d'administrateurs expirees -------------------------------
   const invitations = dryRun
     ? await prisma.adminInvitation.count({ where: { expiresAt: { lte: now } } })
     : (await prisma.adminInvitation.deleteMany({ where: { expiresAt: { lte: now } } })).count;

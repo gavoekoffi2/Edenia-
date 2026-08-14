@@ -250,8 +250,32 @@ export const VERIFICATION_STATUS = [
   "APPROVED",
   "REJECTED",
   "CANCELLED",
+  /** §29 : une verification a une duree de validite. Voir EXPIRY_MONTHS. */
+  "EXPIRED",
 ] as const;
 export type VerificationStatus = (typeof VERIFICATION_STATUS)[number];
+
+/**
+ * Vocabulaire produit — ce que voient l'equipe et les membres.
+ *
+ * Les codes stockes ne sont pas renommes : `APPROVED` et `IN_REVIEW` sont
+ * ecrits dans des milliers de lignes potentielles, dans le seed, et dans les
+ * bases deja creees. Renommer une valeur persistee a la veille d'une beta pour
+ * un gain purement lexical serait un mauvais echange. La traduction se fait
+ * ici, en un seul endroit.
+ */
+export const VERIFICATION_STATUS_LABEL: Record<VerificationStatus, string> = {
+  PENDING: "En attente",
+  IN_REVIEW: "En cours d'examen",
+  NEED_MORE_INFO: "Complément demandé",
+  APPROVED: "Vérifié",
+  REJECTED: "Refusé",
+  CANCELLED: "Annulé",
+  EXPIRED: "Expiré",
+};
+
+/** Statuts qui ouvrent un niveau de confiance. Un seul, volontairement. */
+export const VERIFICATION_GRANTING: readonly VerificationStatus[] = ["APPROVED"];
 
 // --- Moderation (§35) ------------------------------------------------------
 

@@ -85,6 +85,30 @@ export interface VerificationState {
   churchStatus: string;
 }
 
+/**
+ * §29 — duree de validite d'une verification humaine.
+ *
+ * 24 mois : c'est l'horizon deja retenu pour l'inactivite (docs/02 §5), et un
+ * controle d'identite de plus de deux ans ne dit plus grand-chose de la
+ * personne qui se presente aujourd'hui. Un badge accorde une fois pour toutes
+ * finit par affirmer quelque chose que personne n'a verifie.
+ *
+ * L'expiration ne supprime rien : elle repasse le dossier en `EXPIRED`, ce qui
+ * retire le badge et permet de redemander une verification — gratuitement,
+ * comme toujours (§31).
+ */
+export const VERIFICATION_VALIDITY_MONTHS = 24;
+
+export function verificationExpiryFrom(decidedAt: Date): Date {
+  const expiry = new Date(decidedAt);
+  expiry.setMonth(expiry.getMonth() + VERIFICATION_VALIDITY_MONTHS);
+  return expiry;
+}
+
+/**
+ * Un statut n'ouvre un niveau que s'il vaut `APPROVED`. `EXPIRED` ne compte
+ * donc pas — c'est la seule chose a savoir, et elle est verifiee par un test.
+ */
 export function achievedLevels(state: VerificationState): VerificationLevel[] {
   const levels: VerificationLevel[] = [];
   if (state.phoneVerified) levels.push("PHONE");

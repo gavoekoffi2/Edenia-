@@ -7,6 +7,7 @@ import { ProfileActions } from "@/components/profile-actions";
 import { ProfileCard } from "@/components/profile-card";
 import { EmptyState } from "@/components/ui";
 import { premiumIsPublic } from "@/lib/config/monetization";
+import { getBooleanSetting } from "@/lib/settings/service";
 
 export const metadata = { title: "Découvrir", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -22,6 +23,26 @@ export default async function Page({ searchParams }: Props) {
   const rail = (DISCOVERY_RAIL as readonly string[]).includes(params.rail ?? "")
     ? (params.rail as DiscoveryRail)
     : "for-you";
+
+  /*
+   * §22 — la decouverte peut etre suspendue depuis le back-office, par exemple
+   * le temps de traiter une vague de signalements. Les conversations en cours
+   * ne sont pas coupees pour autant : on arrete de presenter de nouvelles
+   * personnes, on n'isole personne de celles qu'il connait deja.
+   */
+  const discoveryOpen = await getBooleanSetting("access.discovery_open");
+  if (!discoveryOpen) {
+    return (
+      <div className="space-y-5">
+        <h1 className="e-display text-xl">Découverte en pause</h1>
+        <EmptyState
+          title="La découverte est momentanément suspendue"
+          body="Notre équipe travaille sur la plateforme. Vos matchs et vos conversations restent accessibles normalement."
+          action={{ label: "Voir mes messages", href: "/app/messages" }}
+        />
+      </div>
+    );
+  }
 
   const tier = await currentTier(user.id);
   const [cards, likesLeft] = await Promise.all([

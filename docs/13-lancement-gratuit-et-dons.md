@@ -106,6 +106,24 @@ pages retenu (§47, minimisation). Remplir cette marche avec le nombre
 d'inscrits donnerait un taux de conversion de 100 % — flatteur et faux. Une
 étape non instrumentée est rendue comme telle, avec son motif.
 
+### Les quatre réglages, et ce qu'ils font vraiment
+
+Un interrupteur qui ne coupe rien est pire que pas d'interrupteur : on croit
+avoir agi. Chacun a donc été vérifié en conditions réelles.
+
+| Réglage | Effet vérifié |
+|---|---|
+| Inscriptions ouvertes | Création de compte refusée ; **un membre existant se connecte toujours** |
+| Découverte ouverte | Page en pause **et** `POST /api/v1/likes` → 503 ; les messages restent ouverts |
+| Dons ouverts | `/soutenir` → 404 et `POST /api/v1/donations` → 403 |
+| Bandeau | Affiché en tête de l'application ; vide = rien |
+
+Le contrôle des inscriptions est placé au moment de la **création du compte**,
+pas à la demande du code. Refuser un code aux seules destinations inconnues
+transformerait l'écran de connexion en oracle : « ce numéro est-il membre
+d'EDENIA ? » se lirait dans la réponse. Au moment de la création, l'appelant
+possède déjà le code envoyé à cette destination — il n'apprend rien.
+
 ### Réglages : deux natures, et pourquoi
 
 **En base** (effet immédiat, sans redéploiement) : inscriptions ouvertes,

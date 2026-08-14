@@ -12,6 +12,17 @@ import { NEVER_PAYWALLED } from "@/lib/premium/entitlements";
 import { decideTransition, grantsPremium, statusFromEvent } from "@/lib/payments/status";
 import { SETTING_DEFINITIONS } from "@/lib/settings/service";
 import { PHOTO_MODERATION_STATUSES, autoModerate } from "@/lib/storage/photos";
+import {
+  VERIFICATION_GRANTING,
+  VERIFICATION_STATUS,
+  VERIFICATION_STATUS_LABEL,
+} from "@/lib/config/enums";
+import {
+  VERIFICATION_VALIDITY_MONTHS,
+  achievedLevels,
+  hasEdeniaBadge,
+  verificationExpiryFrom,
+} from "@/lib/verification/levels";
 
 describe("lancement gratuit (§1, §2)", () => {
   it("part du mode gratuit par défaut", () => {
@@ -124,5 +135,54 @@ describe("modération automatique des photos (M4)", () => {
     expect(PHOTO_MODERATION_STATUSES).toContain("REVIEW_REQUIRED");
     expect(PHOTO_MODERATION_STATUSES).toContain("PENDING");
     expect(new Set(PHOTO_MODERATION_STATUSES).size).toBe(PHOTO_MODERATION_STATUSES.length);
+  });
+});
+
+describe("validité des vérifications (§29, §31)", () => {
+  const base = {
+    phoneVerified: true,
+    emailVerified: false,
+    profileStatus: "NONE",
+    churchStatus: "NONE",
+  };
+
+  it("expose le vocabulaire produit sans renommer les valeurs stockées", () => {
+    expect(VERIFICATION_STATUS).toContain("EXPIRED");
+    expect(VERIFICATION_STATUS_LABEL.APPROVED).toBe("Vérifié");
+    expect(VERIFICATION_STATUS_LABEL.IN_REVIEW).toBe("En cours d'examen");
+    expect(VERIFICATION_STATUS_LABEL.EXPIRED).toBe("Expiré");
+    // Chaque statut stocké a une traduction : aucun code brut ne peut fuir à l'écran.
+    for (const status of VERIFICATION_STATUS) {
+      expect(VERIFICATION_STATUS_LABEL[status].length).toBeGreaterThan(2);
+    }
+  });
+
+  it("n'accorde un niveau que sur APPROVED", () => {
+    expect(VERIFICATION_GRANTING).toEqual(["APPROVED"]);
+    expect(achievedLevels({ ...base, identityStatus: "APPROVED" })).toContain("IDENTITY");
+    for (const status of VERIFICATION_STATUS) {
+      if (status === "APPROVED") continue;
+      expect(achievedLevels({ ...base, identityStatus: status })).not.toContain("IDENTITY");
+    }
+  });
+
+  it("retire le badge dès que la vérification expire", () => {
+    expect(hasEdeniaBadge({ ...base, identityStatus: "APPROVED" })).toBe(true);
+    expect(hasEdeniaBadge({ ...base, identityStatus: "EXPIRED" })).toBe(false);
+  });
+
+  it("calcule une échéance à 24 mois", () => {
+    const decided = new Date("2026-03-15T10:00:00Z");
+    const expiry = verificationExpiryFrom(decided);
+    expect(expiry.getFullYear()).toBe(2028);
+    expect(expiry.getMonth()).toBe(decided.getMonth());
+    expect(VERIFICATION_VALIDITY_MONTHS).toBe(24);
+  });
+
+  it("ne modifie jamais la date de décision d'origine", () => {
+    const decided = new Date("2026-03-15T10:00:00Z");
+    const copy = new Date(decided);
+    verificationExpiryFrom(decided);
+    expect(decided.getTime()).toBe(copy.getTime());
   });
 });

@@ -2,7 +2,7 @@
   "name": "edenia",
   "version": "0.1.0",
   "private": true,
-  "description": "EDENIA — Plateforme PWA de rencontres chretiennes pour l'Afrique francophone",
+  "description": "EDENIA \u2014 Plateforme PWA de rencontres chretiennes pour l'Afrique francophone",
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
@@ -45,5 +45,8 @@
     "tsx": "^4.23.12",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.2"
   }
 }

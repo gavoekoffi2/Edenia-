@@ -24,12 +24,13 @@ import { decideTransition, statusFromEvent, statusFromGateway, type PaymentStatu
  * `activateSubscription`.
  */
 
-/** Palier proposes en FCFA. Libre au-dela, plancher impose par l'agregateur. */
-export const DONATION_PRESETS_XOF = [500, 1000, 2000, 5000, 10000] as const;
+/*
+ * Les paliers proposes (500, 1000, 2000...) vivent dans le formulaire, pas ici :
+ * ce sont des reperes d'interface, pas une regle metier. Le serveur, lui,
+ * n'impose que le plancher et le plafond — un montant libre reste valide.
+ */
 export const MIN_DONATION_XOF = 200;
 export const MAX_DONATION_XOF = 2_000_000;
-
-export const DONATION_STATUSES = ["PENDING", "PROCESSING", "COMPLETED", "FAILED", "CANCELLED", "REFUNDED", "EXPIRED"] as const;
 
 function newDonationRef(): string {
   return `DON-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 6).toUpperCase()}`;

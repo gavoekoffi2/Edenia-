@@ -186,6 +186,20 @@ describe("rôles internes (§36)", () => {
     }
   });
 
+  it("sépare suspendre et bannir", () => {
+    // La route /api/v1/admin/users authentifie sur « users.suspend » puis exige
+    // « users.ban » une fois le corps lu. Cette échelle doit rester réelle :
+    // un modérateur suspend, il ne bannit pas.
+    expect(can("MODERATOR", "users.suspend")).toBe(true);
+    expect(can("MODERATOR", "users.ban")).toBe(false);
+    expect(can("ADMIN", "users.ban")).toBe(true);
+    // Quiconque peut bannir peut suspendre — sinon la garde d'entrée de la
+    // route rejetterait un administrateur légitime avant même de lire le corps.
+    for (const role of ROLES) {
+      if (can(role, "users.ban")) expect(can(role, "users.suspend")).toBe(true);
+    }
+  });
+
   it("n'ouvre au vérificateur que les sections dont il a besoin", () => {
     const sections = sectionsFor("VERIFIER").map((section) => section.href);
     expect(sections).toContain("/admin/verification");

@@ -9,6 +9,12 @@ import { useState } from "react";
  * n'achète rien. Une plateforme qui laisse planer le doute finit par créer une
  * classe de membres privilégiés sans jamais l'avoir décidé.
  */
+/*
+ * Repères de montant, pas une grille imposée : le champ libre reste ouvert et
+ * le serveur n'impose qu'un plancher (200 F) et un plafond. Ils vivent ici,
+ * dans l'interface, parce que c'est une question d'ergonomie — les placer côté
+ * service laisserait croire à une règle métier qui n'existe pas.
+ */
 const PRESETS = [500, 1000, 2000, 5000, 10000];
 
 export function DonationForm({ signedIn }: { signedIn: boolean }) {

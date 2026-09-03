@@ -185,3 +185,82 @@ Trois choses, à dire aux testeurs sans détour :
 
 Le bandeau « MODE DÉVELOPPEMENT » du back-office les liste en permanence.
 `AUTH_MODE=development` **fait échouer le démarrage** en production.
+
+
+## 7. Audit systématique du projet
+
+Un balayage outillé plutôt qu'à l'œil, sur la classe de défaut qui s'était déjà
+présentée deux fois : **du code déclaré que rien n'exécute**. Trois sondes.
+
+### Exports sans aucun usage
+
+27 valeurs exportées et jamais appelées. La plupart sont des constantes
+internes ou des provisions V2 assumées. Deux étaient de vrais défauts :
+
+**`touchActivity` n'était appelée nulle part.** `lastActiveAt` restait donc figé
+à la date d'inscription. Trois choses en dépendaient et mentaient en silence :
+
+- le DAU/WAU/MAU du back-office comptait des **inscriptions**, pas des
+  connexions — un tableau de bord qui affirme une chose et en mesure une autre ;
+- l'étiquette « actif aujourd'hui » d'un profil ;
+- la tâche de purge, qui aurait fini par dépublier des membres **actifs**
+  24 mois après leur inscription.
+
+Corrigé dans `getCurrentUser`, avec un seuil de 5 minutes entre deux écritures
+et sans attendre le résultat : l'activité est un signal, personne ne doit
+attendre son enregistrement pour voir sa page.
+
+**`setSessionCookie` / `clearSessionCookie`** posaient le cookie via
+`cookies()`, alors que nos routes renvoient une `NextResponse` sur laquelle le
+cookie doit être posé directement. Elles avaient l'air d'être le bon outil tout
+en ne fonctionnant pas là où on les aurait appelées — le pire type de code mort.
+Retirées, avec la marche à suivre en commentaire.
+
+### Champs de schéma jamais nommés
+
+45 colonnes. L'écrasante majorité appartient aux entités V2/V3 modélisées
+d'avance (`ChurchPartner`, `DateCheck`, `Event`, `Video`) — la stratégie
+documentée en `docs/02` §6. Vérification croisée faite : **tout ce que le
+contrat d'extraction IA produit est bien persisté**, à une exception.
+
+`Profile.cityLabel` était extrait, affiché dans « ce que j'ai compris »… puis
+jeté, parce que la base veut un `cityId` et que l'IA n'a qu'un nom. Le sélecteur
+de ville arrivait vide et l'écran redemandait une ville que la personne venait
+de dire. Sur un téléphone d'entrée de gamme en 3G, faire ressaisir ce qu'on
+vient d'entendre est exactement la friction que ce parcours doit éviter. Le nom
+est maintenant rapproché de la liste des villes, sans accents ni casse — « lome »
+trouve « Lomé » — et pré-sélectionne. Cela reste modifiable, et un nom qui ne
+correspond à rien laisse simplement le champ vide : pré-sélectionner la mauvaise
+ville serait pire que rien.
+
+### Matrice verbe × route, exécutée pour de bon
+
+Les 30 routes d'API, cinq verbes chacune, sans authentification. Résultat
+attendu partout — 401 sur ce qui exige une session, 405 sur les verbes non
+gérés, 403 sur l'abonnement en lancement gratuit — sauf une ligne.
+
+`PATCH /api/v1/admin/users` renvoyait **400 avant 401** : il validait le corps
+avant d'authentifier, parce que la permission exacte dépend du statut demandé
+(suspendre et bannir ne s'accordent pas au même rôle). Un appelant anonyme
+apprenait donc la forme attendue et les valeurs acceptées sans s'être identifié.
+L'identité s'établit désormais sur la permission la plus faible des deux, puis
+la seconde est exigée une fois le corps connu. Un test verrouille l'échelle :
+quiconque peut bannir peut suspendre, sinon la garde d'entrée rejetterait un
+administrateur légitime.
+
+### Fuite de données privées, sur 21 pages
+
+Les 17 clés de `PRIVATE_KEYS` cherchées dans le HTML rendu de 21 pages —
+publiques, application connectée, back-office élevé. Une seule occurrence :
+l'adresse e-mail sur `/admin/administrateurs`, volontaire et réservée au rôle
+principal, puisqu'il faut bien savoir quel collègue on gère.
+
+### Vulnérabilité de dépendance
+
+`deepmerge-ts < 8.0.0` (épuisement de pile sur un graphe récursif), transitive
+via `@prisma/config`. Le chemin vulnérable est le chargeur de configuration de
+la **CLI**, pas le serveur en production — mais le correctif est disponible.
+Résolu par un `override` vers `^8.0.2`, une majeure au-dessus de ce que Prisma
+déclare : `prisma validate`, `generate` et `db push` ont été réexécutés pour
+vérifier que la CLI fonctionne toujours. Préféré à un passage de Prisma en 7.x
+à la veille d'une bêta. **0 vulnérabilité.**

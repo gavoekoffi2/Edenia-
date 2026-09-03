@@ -60,15 +60,20 @@ export const SESSION_COOKIE_OPTIONS = {
   maxAge: SESSION_TTL_SECONDS,
 } as const;
 
-export async function setSessionCookie(token: string): Promise<void> {
-  const store = await cookies();
-  store.set(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS);
-}
-
-export async function clearSessionCookie(): Promise<void> {
-  const store = await cookies();
-  store.set(SESSION_COOKIE, "", { ...SESSION_COOKIE_OPTIONS, maxAge: 0 });
-}
+/*
+ * `setSessionCookie` / `clearSessionCookie` ont ete retirees.
+ *
+ * Elles posaient le cookie via `cookies()` de `next/headers`. Or nos routes
+ * d'authentification construisent et renvoient une `NextResponse` : le cookie
+ * doit etre pose SUR cette reponse (`response.cookies.set(...)`), sinon il ne
+ * part pas. Les deux aides avaient donc l'air d'etre le bon outil tout en ne
+ * fonctionnant pas la ou on les aurait naturellement appelees — le pire type de
+ * code mort.
+ *
+ * Utiliser directement, dans la route :
+ *   response.cookies.set(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS);
+ *   response.cookies.set(SESSION_COOKIE, "", { ...SESSION_COOKIE_OPTIONS, maxAge: 0 });
+ */
 
 export async function readSessionFromCookies(): Promise<SessionPayload | null> {
   const store = await cookies();

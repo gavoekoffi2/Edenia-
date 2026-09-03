@@ -18,6 +18,16 @@ export interface CurrentUser {
   firstName: string | null;
 }
 
+/**
+ * Frequence maximale d'ecriture de `lastActiveAt`.
+ *
+ * Sans seuil, chaque page rendue provoquerait une ecriture — un cout inutile
+ * pour une donnee dont la precision utile se compte en heures, pas en
+ * secondes. Cinq minutes suffisent largement au DAU, aux rails de decouverte
+ * et a l'etiquette d'activite (qui, elle, est deja arrondie a la journee).
+ */
+const ACTIVITY_WRITE_INTERVAL_MS = 5 * 60_000;
+
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const session = await readSessionFromCookies();
   if (!session) return null;
@@ -31,6 +41,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
       sessionVersion: true,
       phoneVerified: true,
       emailVerified: true,
+      lastActiveAt: true,
       profile: { select: { firstName: true, isPublished: true } },
     },
   });
@@ -39,6 +50,24 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   // Revocation globale : la version portee par le jeton doit correspondre.
   if (user.sessionVersion !== session.sv) return null;
   if (user.status === "BANNED" || user.status === "DELETED") return null;
+
+  /*
+   * §51, §53 — marquage de l'activite.
+   *
+   * `touchActivity` existait mais n'etait appelee nulle part : `lastActiveAt`
+   * restait fige a la date d'inscription. Trois choses en dependent pourtant,
+   * et toutes mentaient en silence — le DAU/WAU/MAU du back-office, qui
+   * comptait des inscriptions et non des connexions ; l'etiquette « actif
+   * aujourd'hui » d'un profil ; et la tache de purge, qui aurait fini par
+   * depublier des membres actifs 24 mois apres leur inscription.
+   *
+   * L'ecriture est volontairement non attendue : l'activite est un signal, pas
+   * une donnee critique, et personne ne doit attendre son enregistrement pour
+   * voir sa page s'afficher.
+   */
+  if (Date.now() - user.lastActiveAt.getTime() > ACTIVITY_WRITE_INTERVAL_MS) {
+    void touchActivity(user.id);
+  }
 
   return {
     id: user.id,
